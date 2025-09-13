@@ -5,30 +5,54 @@ import firebase_admin
 from firebase_admin import firestore, storage as fa_storage
 from google.cloud import storage as gcs
 
-# ---- Init Firebase Admin (uses Cloud Run service account creds) ----
-BUCKET = os.environ.get("BUCKET")
-if not BUCKET:
-    raise RuntimeError("Missing BUCKET env var (e.g., mementoai-ed5d8.firebasestorage.app)")
-
-if not firebase_admin._apps:
-    firebase_admin.initialize_app(options={"storageBucket": BUCKET})
-
-db = firestore.client()
-bucket = fa_storage.bucket()
-gcs_client = gcs.Client()
-
+# ---- Init Flask first ----
 app = Flask(__name__)
 
+# Global variables for lazy initialization
+_db = None
+_bucket = None
+_gcs_client = None
+
+def get_firebase_clients():
+    """Initialize Firebase clients lazily"""
+    global _db, _bucket, _gcs_client
+    
+    if _db is None:
+        try:
+            # Check for BUCKET env var only when needed
+            bucket_name = os.environ.get("BUCKET")
+            if not bucket_name:
+                raise RuntimeError("Missing BUCKET env var (e.g., mementoai-ed5d8.firebasestorage.app)")
+            
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(options={"storageBucket": bucket_name})
+            _db = firestore.client()
+            _bucket = fa_storage.bucket()
+            _gcs_client = gcs.Client()
+        except Exception as e:
+            print(f"Firebase initialization error: {e}")
+            # Return None clients to prevent crashes
+            return None, None, None
+    
+    return _db, _bucket, _gcs_client
+
 # ---------- Health ----------
-@app.get("/healthz")
+@app.route("/", methods=["GET"])
+def root():
+    return "MementoAI Backend is running", 200
+
+@app.route("/healthz", methods=["GET", "HEAD"])
+@app.route("/health", methods=["GET", "HEAD"])
+@app.route("/_ah/health", methods=["GET", "HEAD"])  # GCP convention
 def healthz():
-    return "ok", 200
+    return ("ok", 200, {"Content-Type": "text/plain"})
+
 
 # ---------- Signed upload for media files (audio/video/image) ----------
 # Glasses call this first to get a signed URL to PUT bytes to.
 # Request JSON: { uid, sessionId, ext, contentType }
 # Response JSON: { uploadUrl, storagePath, itemId }
-@app.post("/mintUploadUrl")
+@app.route("/mintUploadUrl", methods=["POST"])
 def mint_upload_url():
     data = request.get_json(force=True, silent=True) or {}
     uid = data.get("uid")
@@ -39,11 +63,14 @@ def mint_upload_url():
     if not uid or not session_id:
         return jsonify({"error": "uid and sessionId are required"}), 400
 
+    # Get Firebase clients lazily
+    db, bucket, gcs_client = get_firebase_clients()
+
     ts = int(time.time() * 1000)
     object_path = f"inputs/{uid}/{session_id}/{ts}.{ext}"
 
     # Signed URL for a single-shot PUT with a strict Content-Type
-    blob = gcs_client.bucket(BUCKET).blob(object_path)
+    blob = gcs_client.bucket(bucket.name).blob(object_path)
     upload_url = blob.generate_signed_url(
         version="v4",
         expiration=600,          # 10 minutes
@@ -69,7 +96,7 @@ def mint_upload_url():
 # ---------- Ingest numeric arrays (e.g., 128-dim embeddings) ----------
 # Request JSON: { uid, sessionId, itemType: "embedding"|..., vector: [floats], meta?: {...} }
 # Response JSON: { ok, itemId }
-@app.post("/ingestArray")
+@app.route("/ingestArray", methods=["POST"])
 def ingest_array():
     data = request.get_json(force=True, silent=True) or {}
     uid = data.get("uid")
@@ -82,6 +109,9 @@ def ingest_array():
         return jsonify({"error": "uid, sessionId, and vector are required"}), 400
     if not isinstance(vector, list):
         return jsonify({"error": "vector must be a list (e.g., 128 floats)"}), 400
+
+    # Get Firebase clients lazily
+    db, bucket, gcs_client = get_firebase_clients()
 
     ts = int(time.time() * 1000)
     doc = {
@@ -99,7 +129,7 @@ def ingest_array():
 # ---------- (Optional) Direct multipart ingest (if you want to proxy file uploads) ----------
 # Glasses POST multipart: fields(uid, sessionId, itemType) + file=@/path/to/file
 # Response JSON: { ok, storagePath, itemId }
-@app.post("/ingest")
+@app.route("/ingest", methods=["POST"])
 def ingest_multipart():
     uid = request.form.get("uid")
     session_id = request.form.get("sessionId")
@@ -108,6 +138,9 @@ def ingest_multipart():
 
     if not uid or not session_id or not file:
         return jsonify({"error": "uid, sessionId and file are required"}), 400
+
+    # Get Firebase clients lazily
+    db, bucket, gcs_client = get_firebase_clients()
 
     ts = int(time.time() * 1000)
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
