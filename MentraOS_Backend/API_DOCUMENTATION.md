@@ -118,7 +118,65 @@ curl -X POST https://mementoai-backend-528890859039.us-central1.run.app/ingestAr
 
 ---
 
-### 4. Direct File Upload
+### 4. Audio Ingestion for Meta Glasses
+**POST** `/ingestAudio`
+
+**Description**: Store processed audio data from Meta glasses with structured metadata.
+
+**Request Body**:
+```json
+{
+  "uid": "user123",
+  "sessionId": "session456",
+  "timestamp": "2025-09-13T20:30:00Z",
+  "location": "Conference Room A",
+  "summary": "Meeting about Q4 planning with marketing team",
+  "transcript": "We discussed the marketing strategy for Q4...",
+  "skills": "project management, strategic planning",
+  "nextSteps": "Schedule follow-up meeting with finance team",
+  "confidence": 85,
+  "contactInfo": "john.doe@company.com, jane.smith@company.com"
+}
+```
+
+**Parameters**:
+- `uid` (required): User identifier
+- `sessionId` (required): Session identifier
+- `timestamp` (required): When the audio was recorded (ISO format)
+- `location` (required): Where the audio was recorded
+- `summary` (required): Summary of the audio content
+- `transcript` (optional): Full transcript of the audio
+- `skills` (optional): Relevant skills mentioned or demonstrated
+- `nextSteps` (optional): Action items or next steps identified
+- `confidence` (optional): Confidence score (integer 0-100)
+- `contactInfo` (optional): Contact information mentioned
+
+**Response**:
+```json
+{
+  "ok": true,
+  "itemId": "1726257600000"
+}
+```
+
+**Example cURL**:
+```bash
+curl -X POST https://mementoai-backend-528890859039.us-central1.run.app/ingestAudio \
+  -H "Content-Type: application/json" \
+  -d '{
+    "uid": "glasses_user_001",
+    "sessionId": "meeting_session_123",
+    "timestamp": "2025-09-13T20:30:00Z",
+    "location": "Conference Room A",
+    "summary": "Q4 planning meeting with marketing team",
+    "transcript": "We need to focus on digital marketing...",
+    "confidence": 90
+  }'
+```
+
+---
+
+### 5. Direct File Upload
 **POST** `/ingest`
 
 **Description**: Upload files directly through multipart form data (alternative to signed URLs).
@@ -198,7 +256,48 @@ All endpoints return appropriate HTTP status codes:
 
 ### Smart Glasses Integration
 
-**1. Audio Recording Upload**:
+**1. Meta Glasses Audio Processing**:
+```javascript
+// Send processed audio data with metadata
+await fetch('/ingestAudio', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    uid: 'glasses_user_001',
+    sessionId: 'meeting_session_123',
+    timestamp: new Date().toISOString(),
+    location: 'Conference Room A',
+    summary: 'Q4 planning discussion with marketing team',
+    transcript: 'We discussed the marketing strategy for Q4...',
+    skills: 'project management, strategic planning',
+    nextSteps: 'Schedule follow-up with finance team',
+    confidence: 85,
+    contactInfo: 'john.doe@company.com'
+  })
+});
+```
+
+**2. Vision/Image Processing (Vector Embeddings)**:
+```javascript
+// Send image embeddings for vision processing
+await fetch('/ingestArray', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    uid: 'glasses_user_001',
+    sessionId: 'vision_session_456',
+    itemType: 'vision_embedding',
+    vector: imageEmbedding, // Array of floats from vision model
+    meta: {
+      imageType: 'scene_analysis',
+      objects_detected: ['person', 'laptop', 'whiteboard'],
+      location: 'Conference Room A'
+    }
+  })
+});
+```
+
+**3. Raw Audio File Upload (if needed)**:
 ```javascript
 // Step 1: Get signed URL
 const uploadResponse = await fetch('/mintUploadUrl', {

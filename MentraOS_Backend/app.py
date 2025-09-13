@@ -126,6 +126,71 @@ def ingest_array():
 
     return jsonify({"ok": True, "itemId": str(ts)}), 200
 
+# ---------- Audio ingestion for Meta glasses ----------
+# Request JSON: { uid, sessionId, timestamp, transcript?, skills?, location, nextSteps?, confidence?, summary, contactInfo? }
+# Response JSON: { ok, itemId }
+@app.route("/ingestAudio", methods=["POST"])
+def ingest_audio():
+    data = request.get_json(force=True, silent=True) or {}
+    uid = data.get("uid")
+    session_id = data.get("sessionId")
+    timestamp = data.get("timestamp")  # Required
+    location = data.get("location")    # Required
+    summary = data.get("summary")      # Required
+    
+    # Optional fields
+    transcript = data.get("transcript")
+    skills = data.get("skills")
+    next_steps = data.get("nextSteps")
+    confidence = data.get("confidence")
+    contact_info = data.get("contactInfo")
+
+    # Validate required fields
+    if not uid or not session_id:
+        return jsonify({"error": "uid and sessionId are required"}), 400
+    if not timestamp:
+        return jsonify({"error": "timestamp is required"}), 400
+    if not location:
+        return jsonify({"error": "location is required"}), 400
+    if not summary:
+        return jsonify({"error": "summary is required"}), 400
+
+    # Validate confidence is int if provided
+    if confidence is not None and not isinstance(confidence, int):
+        return jsonify({"error": "confidence must be an integer"}), 400
+
+    # Get Firebase clients lazily
+    db, bucket, gcs_client = get_firebase_clients()
+    if db is None:
+        return jsonify({"error": "Firebase initialization failed"}), 500
+
+    ts = int(time.time() * 1000)
+    doc = {
+        "uid": uid,
+        "sessionId": session_id,
+        "itemType": "audio_meta",
+        "timestamp": timestamp,
+        "location": location,
+        "summary": summary,
+        "createdAt": firestore.SERVER_TIMESTAMP
+    }
+    
+    # Add optional fields if provided
+    if transcript:
+        doc["transcript"] = transcript
+    if skills:
+        doc["skills"] = skills
+    if next_steps:
+        doc["nextSteps"] = next_steps
+    if confidence is not None:
+        doc["confidence"] = confidence
+    if contact_info:
+        doc["contactInfo"] = contact_info
+    
+    db.document(f"sessions/{session_id}/items/{ts}").set(doc, merge=True)
+
+    return jsonify({"ok": True, "itemId": str(ts)}), 200
+
 # ---------- (Optional) Direct multipart ingest (if you want to proxy file uploads) ----------
 # Glasses POST multipart: fields(uid, sessionId, itemType) + file=@/path/to/file
 # Response JSON: { ok, storagePath, itemId }
