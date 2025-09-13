@@ -18,6 +18,17 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  // Search screen icons
+  'magnifyingglass': 'search',
+  'mic': 'mic',
+  'waveform': 'graphic-eq',
+  'slider.horizontal.3': 'tune',
+  'xmark': 'close',
+  'arrow.up.arrow.down': 'swap-vert',
+  'chevron.up': 'keyboard-arrow-up',
+  'chevron.down': 'keyboard-arrow-down',
+  'list.bullet': 'list',
+  'square.grid.2x2': 'grid-view',
 } as IconMapping;
 
 /**
