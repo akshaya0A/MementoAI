@@ -26,6 +26,7 @@ class VisionServer extends AppServer {
             console.log(`Size: ${photo.size} bytes`)
             console.log(`Type: ${photo.mimeType}`)
             //console.log('button pressed!');
+            this.processPhoto(session);
         });
 
 
@@ -42,9 +43,9 @@ class VisionServer extends AppServer {
             session.logger.info(`Photo as base64 (first 50 chars): ${base64String.substring(0, 50)}...`);
 
             // Save to file (Node.js)
-            const filename = `photo_${Date.now()}.jpg`;
-            fs.writeFileSync(filename, photo.buffer);
-            session.logger.info(`Photo saved to file: ${filename}`);
+            // const filename = `photo_${Date.now()}.jpg`;
+            // fs.writeFileSync(filename, photo.buffer);
+            // session.logger.info(`Photo saved to file: ${filename}`);
 
             // Send to external API
             await this.uploadPhotoToAPI(photo.buffer, photo.mimeType);
@@ -55,9 +56,11 @@ class VisionServer extends AppServer {
 
     private async uploadPhotoToAPI(buffer: Buffer, mimeType: string): Promise<void> {
         // Example: Upload to your backend API
-        // const formData = new FormData();
-        // formData.append('photo', new Blob([buffer], { type: mimeType }));
-        // await fetch('/api/upload', { method: 'POST', body: formData });
+        console.log("uploading photo to API...");
+        const formData = new FormData();
+        const filename = `photo_${Date.now()}.jpg`;
+        formData.append('photo', new Blob([buffer], { type: mimeType }), filename);
+        await fetch('http://127.0.0.1:5000/upload', { method: 'POST', body: formData });
     }
 }
 
