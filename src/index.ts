@@ -6,6 +6,8 @@ import 'dotenv/config';
 import { AppServer, AppSession } from '@mentra/sdk';
 import Ajv from 'ajv';
 import OpenAI from 'openai';
+import { writeFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
 
 const {
   MENTRAOS_API_KEY,
@@ -355,6 +357,60 @@ function setupPipeline(session: AppSession) {
 
     try {
       const summary = await summarize(textNowRaw, session);
+      
+      // Save structured data to JSON file
+      try {
+        // Create output directory if it doesn't exist
+        const outputDir = join(process.cwd(), 'output');
+        mkdirSync(outputDir, { recursive: true });
+        
+        // Generate filename: contact-john-doe-2024-01-15.json
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const contactName = summary.contact ? 
+          summary.contact.split(/[@,\s]/)[0].toLowerCase().replace(/[^a-z0-9]/g, '') : 
+          'unknown';
+        const filename = `contact-${contactName}-${today}.json`;
+        const filepath = join(outputDir, filename);
+        
+        // Get current location using MentraOS LocationManager
+        let locationData = null;
+        try {
+          const currentLocation = await session.location.getLatestLocation({ accuracy: 'hundredMeters' });
+          locationData = {
+            latitude: currentLocation.lat,
+            longitude: currentLocation.lng,
+            accuracy: 'hundredMeters',
+            timestamp: new Date().toISOString()
+          };
+          console.log(`📍 Location captured: ${currentLocation.lat}, ${currentLocation.lng}`);
+        } catch (locationError) {
+          console.warn(`Location capture failed: ${(locationError as Error).message}`);
+        }
+        
+        // Create JSON data structure
+        const jsonData = {
+          timestamp: new Date().toISOString(),
+          contactInfo: summary.contact,
+          skills: summary.skills,
+          location: summary.location,
+          nextSteps: summary.next,
+          confidence: summary.conf,
+          summary: summary.info,
+          gpsLocation: locationData
+        };
+        
+        // Write JSON file
+        writeFileSync(filepath, JSON.stringify(jsonData, null, 2));
+        console.log(`📄 Saved networking data to: ${filename}`);
+        
+        // Show success message in UI
+        const locationStatus = locationData ? '📍 Location captured' : '❌ Location unavailable';
+        await session.layouts.showTextWall(`📄 JSON saved: ${filename}\n${locationStatus}\n\nProcessing audio...`);
+        
+      } catch (jsonError) {
+        console.error(`JSON save failed: ${(jsonError as Error).message}`);
+        await session.layouts.showTextWall(`❌ JSON save failed\n\nContinuing with audio...`);
+      }
       
       // Create structured output for networking
       let output = summary.info;
