@@ -15,7 +15,8 @@ const {
   OPENAI_API_KEY,
   OPENAI_MODEL,
   WAKE_WORD,
-  PORT
+  PORT,
+  USER_ID
 } = process.env;
 
 if (!MENTRAOS_API_KEY || !PACKAGE_NAME || !OPENAI_API_KEY) {
@@ -55,7 +56,7 @@ const schema = {
       description: 'Skills, interests, projects, or technologies discussed',
     },
     location: {
-      type: 'string',
+            type: 'string',
       description: 'Where the person was met (booth number, company name, event location, etc.)',
     },
     next: {
@@ -81,7 +82,7 @@ const tool = {
   type: 'function' as const,
   function: {
     name: 'summary',
-    description:
+  description:
       'Extract key information from recruiter/student conversations at events. Focus on contact details, skills, interests, and next steps.',
     parameters: schema as unknown as Record<string, unknown>,
   },
@@ -103,6 +104,30 @@ Focus on actionable information that helps especially with follow-up and relatio
 // Check if wake word is detected
 function hasWakeWord(text: string): boolean {
   return text.toLowerCase().includes((WAKE_WORD || 'hey memento').toLowerCase());
+}
+
+// Pre-process transcript to improve accuracy
+function cleanTranscript(transcript: string): string {
+  return transcript
+    // Remove excessive whitespace
+    .replace(/\s+/g, ' ')
+    .trim()
+    // Remove common transcription artifacts
+    .replace(/\b(um|uh|er|ah)\b/gi, '')
+    .replace(/\b(like|you know|so|well)\b/gi, '')
+    // Fix common contractions
+    .replace(/\bgonna\b/gi, 'going to')
+    .replace(/\bwanna\b/gi, 'want to')
+    .replace(/\bkinda\b/gi, 'kind of')
+    .replace(/\bgotta\b/gi, 'got to')
+    // Remove repeated words (simple pattern)
+    .replace(/\b(\w+)\s+\1\b/gi, '$1')
+    // Clean up punctuation
+    .replace(/\s+([,.!?])/g, '$1')
+    .replace(/([,.!?])\s*([,.!?])/g, '$1')
+    // Final cleanup
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 // Guard to avoid spammy, tiny transcripts
@@ -133,12 +158,12 @@ async function summarize(
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: 'system', content: PROMPT },
-    {
-      role: 'user',
+      {
+        role: 'user',
       content:
         'Extract key networking information from this conversation at an event. Focus on contact details, skills/interests, opportunities, location where met, and next steps.\n\nConversation:\n' +
-        transcript,
-    },
+              transcript,
+          },
   ];
 
   const summary = await callOpenAI(messages, session);
@@ -351,12 +376,29 @@ function setupPipeline(session: AppSession) {
       return;
     }
 
-    const wordCount = textNowRaw.split(/\s+/).filter(Boolean).length;
-    session.logger.info(`Processing conversation: ${textNowRaw.length} chars, ${wordCount} words`);
-    session.layouts.showTextWall(`Processing conversation...\n\n📊 ${wordCount} words, ${textNowRaw.length} chars`);
+    // Clean the transcript before processing
+    const cleanedTranscript = cleanTranscript(textNowRaw);
+    const wordCount = cleanedTranscript.split(/\s+/).filter(Boolean).length;
+    
+    // Capture raw transcript data for backend processing
+    const rawTranscriptData = {
+      fullText: textNowRaw,
+      segments: segments.map((s, index) => ({
+        text: s,
+        isFinal: true,
+        segmentIndex: index,
+        timestamp: new Date().toISOString()
+      })),
+      wordCount: textNowRaw.split(/\s+/).filter(Boolean).length,
+      charCount: textNowRaw.length,
+      processingTime: Date.now()
+    };
+    
+    session.logger.info(`Processing conversation: ${textNowRaw.length} chars → ${cleanedTranscript.length} chars (cleaned), ${wordCount} words`);
+    session.layouts.showTextWall(`Processing conversation...\n\n📊 ${wordCount} words, ${cleanedTranscript.length} chars (cleaned)`);
 
     try {
-      const summary = await summarize(textNowRaw, session);
+      const summary = await summarize(cleanedTranscript, session);
       
       // Save structured data to JSON file
       try {
@@ -372,20 +414,8 @@ function setupPipeline(session: AppSession) {
         const filename = `contact-${contactName}-${today}.json`;
         const filepath = join(outputDir, filename);
         
-        // Get current location using MentraOS LocationManager
-        let locationData = null;
-        try {
-          const currentLocation = await session.location.getLatestLocation({ accuracy: 'hundredMeters' });
-          locationData = {
-            latitude: currentLocation.lat,
-            longitude: currentLocation.lng,
-            accuracy: 'hundredMeters',
-            timestamp: new Date().toISOString()
-          };
-          console.log(`📍 Location captured: ${currentLocation.lat}, ${currentLocation.lng}`);
-        } catch (locationError) {
-          console.warn(`Location capture failed: ${(locationError as Error).message}`);
-        }
+        // Get location using MentraOS best practices
+        const locationData = await getLocation(session);
         
         // Create JSON data structure
         const jsonData = {
@@ -396,16 +426,25 @@ function setupPipeline(session: AppSession) {
           nextSteps: summary.next,
           confidence: summary.conf,
           summary: summary.info,
-          gpsLocation: locationData
+          gpsLocation: locationData || null,
+          transcript: {
+            original: textNowRaw,
+            cleaned: cleanedTranscript,
+            raw: rawTranscriptData
+          }
         };
         
-        // Write JSON file
+        // Write JSON file locally
         writeFileSync(filepath, JSON.stringify(jsonData, null, 2));
         console.log(`📄 Saved networking data to: ${filename}`);
         
+        // Send to backend API (ready for new endpoint)
+        const backendSuccess = await sendToBackend(jsonData, session);
+        
         // Show success message in UI
         const locationStatus = locationData ? '📍 Location captured' : '❌ Location unavailable';
-        await session.layouts.showTextWall(`📄 JSON saved: ${filename}\n${locationStatus}\n\nProcessing audio...`);
+        const backendStatus = backendSuccess ? '☁️ Backend synced' : '❌ Backend failed';
+        await session.layouts.showTextWall(`📄 JSON saved: ${filename}\n${locationStatus}\n${backendStatus}\n\nProcessing audio...`);
         
       } catch (jsonError) {
         console.error(`JSON save failed: ${(jsonError as Error).message}`);
@@ -444,7 +483,7 @@ function setupPipeline(session: AppSession) {
 
   // ============== Transcription handling ===================================
 
-  const onTranscription = (data: { 
+  const onTranscription = (data: {
     text: string; 
     isFinal: boolean;
     startTime?: number;
@@ -537,14 +576,126 @@ function setupPipeline(session: AppSession) {
   };
 }
 
+// Track if greeting has been spoken to prevent duplicates
+let greetingSpoken = false;
+
+// Function to get location using MentraOS best practices
+async function getLocation(session: AppSession): Promise<any> {
+  return new Promise((resolve) => {
+    console.log('🔍 Starting location capture...');
+    
+    // Try getLatestLocation first (most efficient)
+    session.location.getLatestLocation({ accuracy: 'kilometer' })
+      .then((currentLocation) => {
+        console.log('📍 Raw location data from getLatestLocation:', currentLocation);
+        
+        if (currentLocation && currentLocation.lat && currentLocation.lng) {
+          const locationData = {
+            latitude: currentLocation.lat,
+            longitude: currentLocation.lng,
+            accuracy: 'kilometer',
+            timestamp: new Date().toISOString()
+          };
+          console.log(`📍 Location captured: ${currentLocation.lat}, ${currentLocation.lng}`);
+          resolve(locationData);
+        } else {
+          console.warn('⚠️ getLatestLocation returned incomplete data:', currentLocation);
+          resolve(null);
+        }
+      })
+      .catch((err) => {
+        console.error('❌ getLatestLocation failed:', (err as Error).message);
+        
+        // Fallback: Try continuous stream for a few seconds
+        console.log('🔄 Trying continuous location stream as fallback...');
+        let locationReceived = false;
+        
+        const unsubscribe = session.location.subscribeToStream(
+          { accuracy: 'kilometer' },
+          (data) => {
+            if (!locationReceived && data && data.lat && data.lng) {
+              locationReceived = true;
+              console.log('📍 Location from stream:', data);
+              
+              const locationData = {
+                latitude: data.lat,
+                longitude: data.lng,
+                accuracy: 'kilometer',
+                timestamp: new Date().toISOString()
+              };
+              
+              unsubscribe(); // Stop the stream
+              resolve(locationData);
+            }
+          }
+        );
+        
+        // Timeout after 5 seconds
+        setTimeout(() => {
+          if (!locationReceived) {
+            console.warn('⏰ Location stream timeout');
+            unsubscribe();
+            resolve(null);
+          }
+        }, 5000);
+      });
+  });
+}
+
+// Function to send JSON data to backend API
+async function sendToBackend(jsonData: any, session: AppSession): Promise<boolean> {
+  try {
+    console.log('🚀 Sending networking data to backend API...');
+    
+    // Transform our JSON data to match the /ingestAudio endpoint format
+    const backendPayload = {
+      uid: USER_ID || 'mentra_user', // Use env var or default
+      sessionId: `networking_${Date.now()}`, // Unique session ID
+      timestamp: jsonData.timestamp,
+      location: jsonData.location,
+      summary: jsonData.summary,
+      transcript: jsonData.transcript?.original || '',
+      skills: Array.isArray(jsonData.skills) ? jsonData.skills.join(', ') : jsonData.skills,
+      nextSteps: jsonData.nextSteps,
+      confidence: Math.round(jsonData.confidence * 100), // Convert 0-1 to 0-100
+      contactInfo: jsonData.contactInfo,
+      // Include additional metadata
+      gpsLocation: jsonData.gpsLocation,
+      rawTranscript: jsonData.transcript?.raw || null
+    };
+    
+    const response = await fetch('https://mementoai-backend-528890859039.us-central1.run.app/ingestAudio', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(backendPayload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ Data sent to backend successfully:', result);
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to send data to backend:', (error as Error).message);
+    return false;
+  }
+}
+
 async function onStart(session: AppSession) {
   session.logger.info(`[Session] Started: ${Date.now()}`);
 
-  // Greet user with wake word info
-  try {
-    await session.audio.speak(`Event networking assistant ready. Say "${WAKE_WORD}" to start capturing conversation details.`);
+  // Greet user with wake word info (only once)
+  if (!greetingSpoken) {
+    try {
+      await session.audio.speak(`Event networking assistant ready. Say "${WAKE_WORD}" to start capturing conversation details.`);
+      greetingSpoken = true;
   } catch (e) {
     session.logger.warn(`[Audio] Greeting speak failed: ${(e as Error).message}`);
+    }
   }
 
   const pipeline = setupPipeline(session);

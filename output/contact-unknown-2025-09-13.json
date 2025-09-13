@@ -1,12 +1,28 @@
 {
-  "timestamp": "2025-09-13T19:12:11.791Z",
+  "timestamp": "2025-09-13T21:43:49.326Z",
   "contactInfo": "",
-  "skills": [
-    "Python",
-    "C++"
-  ],
-  "location": "Palm booth at FR, called Park MIT",
-  "nextSteps": "Follow up for potential opportunities in software development or internships.",
-  "confidence": 0.9,
-  "summary": "Met a student from the University of Michigan who is passionate about Python and C++. They are currently at the Palm booth at FR, called Park MIT."
+  "skills": [],
+  "location": "",
+  "nextSteps": "",
+  "confidence": 0,
+  "summary": "The conversation did not provide any actionable information or details about the person or opportunity.",
+  "gpsLocation": null,
+  "transcript": {
+    "original": "Can you hear me?",
+    "cleaned": "Can you hear me?",
+    "raw": {
+      "fullText": "Can you hear me?",
+      "segments": [
+        {
+          "text": "Can you hear me?",
+          "isFinal": true,
+          "segmentIndex": 0,
+          "timestamp": "2025-09-13T21:43:43.620Z"
+        }
+      ],
+      "wordCount": 4,
+      "charCount": 16,
+      "processingTime": 1757799823620
+    }
+  }
 }
