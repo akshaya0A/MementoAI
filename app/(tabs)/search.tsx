@@ -1,8 +1,7 @@
 import { ContactCard } from '@/components/ContactCard';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { MementoColors, MementoFontSizes } from '@/constants/mementoTheme';
-import { mockContacts } from '@/data/sampleContacts';
-import { Contact } from '@/types/contact';
+import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '@/constants/mementoTheme';
+import { useFirebaseContacts } from '@/hooks/useFirebaseContacts';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,7 +11,7 @@ type SortOrder = 'asc' | 'desc';
 type ViewMode = 'list' | 'grid';
 
 export default function SearchScreen() {
-  const [contacts] = useState<Contact[]>(mockContacts);
+  const { contacts, loading, error } = useFirebaseContacts();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<string>('all');
   const [selectedTag, setSelectedTag] = useState<string>('all');
@@ -103,6 +102,31 @@ export default function SearchScreen() {
   };
 
   const hasActiveFilters = searchQuery !== '' || selectedEvent !== 'all' || selectedTag !== 'all';
+
+  // Show loading state
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading contacts...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => window.location.reload()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -321,6 +345,40 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: MementoColors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: MementoSpacing.lg,
+  },
+  loadingText: {
+    fontSize: MementoFontSizes.lg,
+    color: MementoColors.text.primary,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: MementoSpacing.lg,
+  },
+  errorText: {
+    fontSize: MementoFontSizes.md,
+    color: MementoColors.text.error,
+    textAlign: 'center',
+    marginBottom: MementoSpacing.md,
+  },
+  retryButton: {
+    backgroundColor: MementoColors.primary,
+    paddingHorizontal: MementoSpacing.lg,
+    paddingVertical: MementoSpacing.sm,
+    borderRadius: MementoBorderRadius.md,
+  },
+  retryButtonText: {
+    color: MementoColors.text.white,
+    fontSize: MementoFontSizes.md,
+    fontWeight: '600',
   },
   scrollView: {
     flex: 1,

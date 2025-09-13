@@ -3,14 +3,14 @@ import { ContactForm } from '@/components/ContactForm';
 import { StatCard } from '@/components/StatCard';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '@/constants/mementoTheme';
-import { mockContacts } from '@/data/sampleContacts';
+import { useFirebaseContacts } from '@/hooks/useFirebaseContacts';
 import { Contact } from '@/types/contact';
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function DashboardScreen() {
-  const [contacts, setContacts] = useState(mockContacts);
+  const { contacts, loading, error, addContact, updateContact, deleteContact } = useFirebaseContacts();
   const [showAddContact, setShowAddContact] = useState(false);
 
   // Get recent encounters (last 8)
@@ -49,14 +49,15 @@ export default function DashboardScreen() {
     )
   ).length;
 
-  const handleAddContact = (contactData: Omit<Contact, 'id'>) => {
-    const newContact: Contact = {
-      ...contactData,
-      id: Date.now().toString(),
-    };
-    setContacts(prev => [...prev, newContact]);
-    setShowAddContact(false);
-    Alert.alert('Success', 'Contact added successfully!');
+  const handleAddContact = async (contactData: Omit<Contact, 'id'>) => {
+    try {
+      await addContact(contactData);
+      setShowAddContact(false);
+      Alert.alert('Success', 'Contact added successfully!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add contact. Please try again.');
+      console.error('Error adding contact:', error);
+    }
   };
 
   const handleImportContacts = () => {
@@ -74,6 +75,31 @@ export default function DashboardScreen() {
       [{ text: 'OK' }]
     );
   };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading contacts...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => window.location.reload()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -265,6 +291,40 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: MementoColors.backgroundSecondary,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: MementoSpacing.lg,
+  },
+  loadingText: {
+    fontSize: MementoFontSizes.lg,
+    color: MementoColors.text.primary,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: MementoSpacing.lg,
+  },
+  errorText: {
+    fontSize: MementoFontSizes.md,
+    color: MementoColors.text.error,
+    textAlign: 'center',
+    marginBottom: MementoSpacing.md,
+  },
+  retryButton: {
+    backgroundColor: MementoColors.primary,
+    paddingHorizontal: MementoSpacing.lg,
+    paddingVertical: MementoSpacing.sm,
+    borderRadius: MementoBorderRadius.md,
+  },
+  retryButtonText: {
+    color: MementoColors.text.white,
+    fontSize: MementoFontSizes.md,
+    fontWeight: '600',
   },
   scrollView: {
     flex: 1,

@@ -1,12 +1,12 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '@/constants/mementoTheme';
-import { mockContacts } from '@/data/sampleContacts';
+import { useFirebaseContacts } from '@/hooks/useFirebaseContacts';
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ExportScreen() {
-  const contacts = mockContacts;
+  const { contacts, loading, error } = useFirebaseContacts();
   const [selectedFormat, setSelectedFormat] = useState<'vcard' | 'csv' | 'json'>('vcard');
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [isExporting, setIsExporting] = useState(false);
@@ -109,6 +109,31 @@ export default function ExportScreen() {
       row.map(field => `"${field}"`).join(',')
     ).join('\n');
   };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading contacts...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => window.location.reload()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -221,6 +246,40 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: MementoColors.backgroundSecondary,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: MementoSpacing.lg,
+  },
+  loadingText: {
+    fontSize: MementoFontSizes.lg,
+    color: MementoColors.text.primary,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: MementoSpacing.lg,
+  },
+  errorText: {
+    fontSize: MementoFontSizes.md,
+    color: MementoColors.text.error,
+    textAlign: 'center',
+    marginBottom: MementoSpacing.md,
+  },
+  retryButton: {
+    backgroundColor: MementoColors.primary,
+    paddingHorizontal: MementoSpacing.lg,
+    paddingVertical: MementoSpacing.sm,
+    borderRadius: MementoBorderRadius.md,
+  },
+  retryButtonText: {
+    color: MementoColors.text.white,
+    fontSize: MementoFontSizes.md,
+    fontWeight: '600',
   },
   scrollView: {
     flex: 1,

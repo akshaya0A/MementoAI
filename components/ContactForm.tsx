@@ -2,8 +2,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '@/constants/mementoTheme';
 import { Contact } from '@/types/contact';
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, Dimensions, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface ContactFormProps {
   contact?: Contact;
@@ -110,19 +109,34 @@ export const ContactForm: React.FC<ContactFormProps> = ({ contact, onSave, onCan
     }));
   };
 
+  const screenHeight = Dimensions.get('window').height;
+  const screenWidth = Dimensions.get('window').width;
+
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onCancel} style={styles.cancelButton}>
-            <IconSymbol name="xmark" size={20} color={MementoColors.text.primary} />
-          </TouchableOpacity>
-          <Text style={styles.title}>{contact ? 'Edit Contact' : 'Add Contact'}</Text>
-          <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
-            <Text style={styles.saveButtonText}>Save</Text>
-          </TouchableOpacity>
-        </View>
+    <Modal
+      visible={true}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={onCancel}
+    >
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity 
+          style={styles.backdrop} 
+          activeOpacity={1} 
+          onPress={onCancel}
+        />
+        <View style={[styles.modalContainer, { maxHeight: screenHeight * 0.9, width: screenWidth * 0.95 }]}>
+          <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity onPress={onCancel} style={styles.cancelButton}>
+                <IconSymbol name="xmark" size={20} color={MementoColors.text.primary} />
+              </TouchableOpacity>
+              <Text style={styles.title}>{contact ? 'Edit Contact' : 'Add Contact'}</Text>
+              <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
+                <Text style={styles.saveButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
 
         {/* Basic Information */}
         <View style={styles.section}>
@@ -294,18 +308,41 @@ export const ContactForm: React.FC<ContactFormProps> = ({ contact, onSave, onCan
             ))}
           </View>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  modalOverlay: {
     flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  modalContainer: {
     backgroundColor: MementoColors.backgroundSecondary,
+    borderRadius: MementoBorderRadius.lg,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   scrollView: {
-    flex: 1,
+    maxHeight: '100%',
   },
   header: {
     flexDirection: 'row',

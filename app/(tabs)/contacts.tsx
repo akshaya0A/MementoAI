@@ -2,7 +2,7 @@ import { ContactCard } from '@/components/ContactCard';
 import { ContactForm } from '@/components/ContactForm';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '@/constants/mementoTheme';
-import { mockContacts } from '@/data/sampleContacts';
+import { useFirebaseContacts } from '@/hooks/useFirebaseContacts';
 import { Contact } from '@/types/contact';
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -13,7 +13,7 @@ type SortOrder = 'asc' | 'desc';
 type ViewMode = 'grid' | 'list';
 
 export default function ContactsScreen() {
-  const [contacts, setContacts] = useState(mockContacts);
+  const { contacts, loading, error, addContact, updateContact, deleteContact } = useFirebaseContacts();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -67,36 +67,36 @@ export default function ContactsScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            setContacts(prev => prev.filter(contact => contact.id !== contactId));
-            Alert.alert('Success', 'Contact deleted successfully!');
+          onPress: async () => {
+            try {
+              await deleteContact(contactId);
+              Alert.alert('Success', 'Contact deleted successfully!');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete contact. Please try again.');
+              console.error('Error deleting contact:', error);
+            }
           }
         }
       ]
     );
   };
 
-  const handleSaveContact = (contactData: Omit<Contact, 'id'>) => {
-    if (editingContact) {
-      // Update existing contact
-      setContacts(prev => 
-        prev.map(contact => 
-          contact.id === editingContact.id 
-            ? { ...contactData, id: editingContact.id }
-            : contact
-        )
-      );
-      setEditingContact(null);
-      Alert.alert('Success', 'Contact updated successfully!');
-    } else {
-      // Add new contact
-      const newContact: Contact = {
-        ...contactData,
-        id: Date.now().toString(),
-      };
-      setContacts(prev => [...prev, newContact]);
-      setShowAddContact(false);
-      Alert.alert('Success', 'Contact added successfully!');
+  const handleSaveContact = async (contactData: Omit<Contact, 'id'>) => {
+    try {
+      if (editingContact) {
+        // Update existing contact
+        await updateContact(editingContact.id, contactData);
+        setEditingContact(null);
+        Alert.alert('Success', 'Contact updated successfully!');
+      } else {
+        // Add new contact
+        await addContact(contactData);
+        setShowAddContact(false);
+        Alert.alert('Success', 'Contact added successfully!');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save contact. Please try again.');
+      console.error('Error saving contact:', error);
     }
   };
 
@@ -104,6 +104,31 @@ export default function ContactsScreen() {
     setEditingContact(null);
     setShowAddContact(true);
   };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading contacts...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => window.location.reload()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -274,6 +299,40 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: MementoColors.backgroundSecondary,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: MementoSpacing.lg,
+  },
+  loadingText: {
+    fontSize: MementoFontSizes.lg,
+    color: MementoColors.text.primary,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: MementoSpacing.lg,
+  },
+  errorText: {
+    fontSize: MementoFontSizes.md,
+    color: MementoColors.text.error,
+    textAlign: 'center',
+    marginBottom: MementoSpacing.md,
+  },
+  retryButton: {
+    backgroundColor: MementoColors.primary,
+    paddingHorizontal: MementoSpacing.lg,
+    paddingVertical: MementoSpacing.sm,
+    borderRadius: MementoBorderRadius.md,
+  },
+  retryButtonText: {
+    color: MementoColors.text.white,
+    fontSize: MementoFontSizes.md,
+    fontWeight: '600',
   },
   header: {
     flexDirection: 'row',
