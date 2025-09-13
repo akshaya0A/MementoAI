@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Contact } from '@/types/contact';
 import { ContactCard } from '@/components/ContactCard';
-import { mockContacts } from '@/data/sampleContacts';
-import { MementoColors, MementoSpacing, MementoFontSizes, MementoBorderRadius } from '@/constants/mementoTheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { MementoColors, MementoFontSizes } from '@/constants/mementoTheme';
+import { mockContacts } from '@/data/sampleContacts';
+import { Contact } from '@/types/contact';
+import React, { useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type SortBy = 'name' | 'company' | 'date' | 'encounters';
 type SortOrder = 'asc' | 'desc';
@@ -16,9 +16,9 @@ export default function SearchScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<string>('all');
   const [selectedTag, setSelectedTag] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<SortBy>('name');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [sortBy, setSortBy] = useState<SortBy>('date');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
   // Get unique events and tags for filters
   const allEvents = useMemo(() => {
@@ -44,41 +44,28 @@ export default function SearchScreen() {
   // Filter and sort contacts
   const filteredContacts = useMemo(() => {
     let filtered = contacts.filter(contact => {
-      // Search query filter
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const matchesName = contact.name.toLowerCase().includes(query);
-        const matchesCompany = contact.company.toLowerCase().includes(query);
-        const matchesRole = contact.role.toLowerCase().includes(query);
-        const matchesNotes = contact.notes.some(note => 
-          note.content.toLowerCase().includes(query)
-        );
-        const matchesTags = contact.tags.some(tag => 
-          tag.toLowerCase().includes(query)
-        );
-        
-        if (!matchesName && !matchesCompany && !matchesRole && !matchesNotes && !matchesTags) {
-          return false;
-        }
-      }
+      // Text search
+      const matchesSearch = searchQuery === '' || 
+        contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        contact.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        contact.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        contact.whereFrom.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        contact.whereMet.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        contact.funFacts.some(fact => fact.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        contact.notes.some(note => note.content.toLowerCase().includes(searchQuery.toLowerCase()));
 
       // Event filter
-      if (selectedEvent !== 'all') {
-        const hasEvent = contact.encounters.some(encounter => 
-          encounter.event === selectedEvent
-        );
-        if (!hasEvent) return false;
-      }
+      const matchesEvent = selectedEvent === 'all' || 
+        contact.encounters.some(encounter => encounter.event === selectedEvent);
 
       // Tag filter
-      if (selectedTag !== 'all') {
-        if (!contact.tags.includes(selectedTag)) return false;
-      }
+      const matchesTag = selectedTag === 'all' || 
+        contact.tags.includes(selectedTag);
 
-      return true;
+      return matchesSearch && matchesEvent && matchesTag;
     });
 
-    // Sort contacts
+    // Sort
     filtered.sort((a, b) => {
       let comparison = 0;
       
@@ -102,49 +89,20 @@ export default function SearchScreen() {
           comparison = aLatest - bLatest;
           break;
       }
-
+      
       return sortOrder === 'asc' ? comparison : -comparison;
     });
 
     return filtered;
   }, [contacts, searchQuery, selectedEvent, selectedTag, sortBy, sortOrder]);
 
-  const activeFilters = useMemo(() => {
-    const filters = [];
-    if (selectedEvent !== 'all') filters.push({ type: 'event', value: selectedEvent });
-    if (selectedTag !== 'all') filters.push({ type: 'tag', value: selectedTag });
-    return filters;
-  }, [selectedEvent, selectedTag]);
-
   const clearFilters = () => {
+    setSearchQuery('');
     setSelectedEvent('all');
     setSelectedTag('all');
-    setSearchQuery('');
   };
 
-  const removeFilter = (type: string) => {
-    if (type === 'event') setSelectedEvent('all');
-    if (type === 'tag') setSelectedTag('all');
-  };
-
-  const FilterButton = ({ 
-    title, 
-    isActive, 
-    onPress 
-  }: { 
-    title: string; 
-    isActive: boolean; 
-    onPress: () => void; 
-  }) => (
-    <TouchableOpacity
-      style={[styles.filterButton, isActive && styles.filterButtonActive]}
-      onPress={onPress}
-    >
-      <Text style={[styles.filterButtonText, isActive && styles.filterButtonTextActive]}>
-        {title}
-      </Text>
-    </TouchableOpacity>
-  );
+  const hasActiveFilters = searchQuery !== '' || selectedEvent !== 'all' || selectedTag !== 'all';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -152,17 +110,17 @@ export default function SearchScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Search & Browse</Text>
-          <Text style={styles.subtitle}>Find contacts with advanced filters</Text>
+          <Text style={styles.subtitle}>Find and explore your contacts</Text>
         </View>
 
         {/* Search Bar */}
         <View style={styles.searchCard}>
           <View style={styles.searchContainer}>
-            <IconSymbol name="magnifyingglass" size={20} color={MementoColors.textSecondary} />
+            <IconSymbol name="magnifyingglass" size={20} color={MementoColors.text.secondary} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search contacts, companies, notes..."
-              placeholderTextColor={MementoColors.textTertiary}
+              placeholder="Search by name, company, role, location, fun facts, or notes..."
+              placeholderTextColor={MementoColors.text.muted}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
@@ -170,77 +128,84 @@ export default function SearchScreen() {
               <IconSymbol name="mic" size={16} color={MementoColors.primary} />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.voicePrompt}>
-            <IconSymbol name="waveform" size={14} color={MementoColors.textSecondary} />
-            <Text style={styles.voiceText}>Try "Show me contacts from MIT"</Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Filters */}
+        {/* Filters and Controls */}
         <View style={styles.controlsContainer}>
           <View style={styles.filtersHeader}>
-            <IconSymbol name="slider.horizontal.3" size={16} color={MementoColors.textSecondary} />
-            <Text style={styles.filtersText}>Filters</Text>
+            <IconSymbol name="slider.horizontal.3" size={16} color={MementoColors.text.secondary} />
+            <Text style={styles.filtersText}>Filters:</Text>
           </View>
           
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll}>
             {/* Event Filter */}
             <View style={styles.filterGroup}>
-              <FilterButton
-                title="All Events"
-                isActive={selectedEvent === 'all'}
+              <TouchableOpacity
+                style={[styles.filterButton, selectedEvent === 'all' && styles.filterButtonActive]}
                 onPress={() => setSelectedEvent('all')}
-              />
+              >
+                <Text style={[styles.filterButtonText, selectedEvent === 'all' && styles.filterButtonTextActive]}>
+                  All Events
+                </Text>
+              </TouchableOpacity>
               {allEvents.map(event => (
-                <FilterButton
+                <TouchableOpacity
                   key={event}
-                  title={event}
-                  isActive={selectedEvent === event}
+                  style={[styles.filterButton, selectedEvent === event && styles.filterButtonActive]}
                   onPress={() => setSelectedEvent(event)}
-                />
+                >
+                  <Text style={[styles.filterButtonText, selectedEvent === event && styles.filterButtonTextActive]}>
+                    {event}
+                  </Text>
+                </TouchableOpacity>
               ))}
             </View>
             
             {/* Tag Filter */}
             <View style={styles.filterGroup}>
-              <FilterButton
-                title="All Tags"
-                isActive={selectedTag === 'all'}
+              <TouchableOpacity
+                style={[styles.filterButton, selectedTag === 'all' && styles.filterButtonActive]}
                 onPress={() => setSelectedTag('all')}
-              />
+              >
+                <Text style={[styles.filterButtonText, selectedTag === 'all' && styles.filterButtonTextActive]}>
+                  All Tags
+                </Text>
+              </TouchableOpacity>
               {allTags.map(tag => (
-                <FilterButton
+                <TouchableOpacity
                   key={tag}
-                  title={tag}
-                  isActive={selectedTag === tag}
+                  style={[styles.filterButton, selectedTag === tag && styles.filterButtonActive]}
                   onPress={() => setSelectedTag(tag)}
-                />
+                >
+                  <Text style={[styles.filterButtonText, selectedTag === tag && styles.filterButtonTextActive]}>
+                    {tag}
+                  </Text>
+                </TouchableOpacity>
               ))}
             </View>
           </ScrollView>
 
-          {activeFilters.length > 0 && (
+          {hasActiveFilters && (
             <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
               <IconSymbol name="xmark" size={12} color="white" />
-              <Text style={styles.clearButtonText}>Clear All</Text>
+              <Text style={styles.clearButtonText}>Clear</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Controls Row */}
+        {/* Sort and View Controls */}
         <View style={styles.controlsRow}>
-          {/* Sort Controls */}
           <View style={styles.sortControls}>
             <TouchableOpacity 
               style={styles.sortButton}
               onPress={() => {
-                const sortOptions: SortBy[] = ['name', 'company', 'date', 'encounters'];
+                const sortOptions: SortBy[] = ['date', 'name', 'company', 'encounters'];
                 const currentIndex = sortOptions.indexOf(sortBy);
                 const nextIndex = (currentIndex + 1) % sortOptions.length;
                 setSortBy(sortOptions[nextIndex]);
               }}
             >
-              <IconSymbol name="arrow.up.arrow.down" size={16} color={MementoColors.textSecondary} />
+              <IconSymbol name="arrow.up.arrow.down" size={16} color={MementoColors.text.secondary} />
               <Text style={styles.sortButtonText}>
                 Sort: {sortBy.charAt(0).toUpperCase() + sortBy.slice(1)}
               </Text>
@@ -253,45 +218,66 @@ export default function SearchScreen() {
               <IconSymbol 
                 name={sortOrder === 'asc' ? "chevron.up" : "chevron.down"} 
                 size={16} 
-                color={MementoColors.textSecondary} 
+                color={MementoColors.text.secondary} 
               />
               <Text style={styles.sortOrderText}>{sortOrder.toUpperCase()}</Text>
             </TouchableOpacity>
           </View>
 
-          {/* View Toggle */}
           <View style={styles.viewToggle}>
             <TouchableOpacity
               style={[styles.viewButton, viewMode === 'list' && styles.viewButtonActive]}
               onPress={() => setViewMode('list')}
             >
-              <IconSymbol name="list.bullet" size={16} color={MementoColors.textSecondary} />
+              <IconSymbol name="list.bullet" size={16} color={MementoColors.text.secondary} />
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.viewButton, viewMode === 'grid' && styles.viewButtonActive]}
               onPress={() => setViewMode('grid')}
             >
-              <IconSymbol name="square.grid.2x2" size={16} color={MementoColors.textSecondary} />
+              <IconSymbol name="square.grid.2x2" size={16} color={MementoColors.text.secondary} />
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Active Filters Display */}
-        {activeFilters.length > 0 && (
+        {hasActiveFilters && (
           <View style={styles.activeBadgesContainer}>
-            {activeFilters.map((filter, index) => (
-              <View key={index} style={styles.activeBadge}>
-                <Text style={styles.activeBadgeText}>
-                  {filter.type}: {filter.value}
-                </Text>
+            {searchQuery && (
+              <View style={styles.activeBadge}>
+                <Text style={styles.activeBadgeText}>Search: {searchQuery}</Text>
                 <TouchableOpacity 
                   style={styles.badgeRemove}
-                  onPress={() => removeFilter(filter.type)}
+                  onPress={() => setSearchQuery('')}
                 >
-                  <IconSymbol name="xmark" size={12} color={MementoColors.textSecondary} />
+                  <IconSymbol name="xmark" size={12} color={MementoColors.text.secondary} />
                 </TouchableOpacity>
               </View>
-            ))}
+            )}
+            {selectedEvent !== 'all' && (
+              <View style={styles.activeBadge}>
+                <IconSymbol name="calendar" size={12} color={MementoColors.text.secondary} />
+                <Text style={styles.activeBadgeText}>{selectedEvent}</Text>
+                <TouchableOpacity 
+                  style={styles.badgeRemove}
+                  onPress={() => setSelectedEvent('all')}
+                >
+                  <IconSymbol name="xmark" size={12} color={MementoColors.text.secondary} />
+                </TouchableOpacity>
+              </View>
+            )}
+            {selectedTag !== 'all' && (
+              <View style={styles.activeBadge}>
+                <IconSymbol name="tag" size={12} color={MementoColors.text.secondary} />
+                <Text style={styles.activeBadgeText}>{selectedTag}</Text>
+                <TouchableOpacity 
+                  style={styles.badgeRemove}
+                  onPress={() => setSelectedTag('all')}
+                >
+                  <IconSymbol name="xmark" size={12} color={MementoColors.text.secondary} />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
@@ -301,29 +287,28 @@ export default function SearchScreen() {
             {filteredContacts.length} contact{filteredContacts.length !== 1 ? 's' : ''} found
           </Text>
           
-          {filteredContacts.length > 0 ? (
+          {filteredContacts.length === 0 ? (
+            <View style={styles.noResults}>
+              <IconSymbol name="magnifyingglass" size={48} color={MementoColors.text.muted} />
+              <Text style={styles.noResultsTitle}>No contacts found</Text>
+              <Text style={styles.noResultsText}>
+                Try adjusting your search terms or filters
+              </Text>
+              {hasActiveFilters && (
+                <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
+                  <Text style={styles.clearFiltersButtonText}>Clear Filters</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
             <View style={viewMode === 'grid' ? styles.gridContainer : styles.listContainer}>
               {filteredContacts.map((contact) => (
                 <ContactCard
                   key={contact.id}
                   contact={contact}
-                  showEncounterCount={true}
-                  showRecentEncounter={true}
+                  onPress={() => console.log('Contact pressed:', contact.name)}
                 />
               ))}
-            </View>
-          ) : (
-            <View style={styles.noResults}>
-              <IconSymbol name="magnifyingglass" size={48} color={MementoColors.textTertiary} />
-              <Text style={styles.noResultsTitle}>No contacts found</Text>
-              <Text style={styles.noResultsText}>
-                Try adjusting your search terms or filters
-              </Text>
-              {activeFilters.length > 0 && (
-                <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
-                  <Text style={styles.clearFiltersButtonText}>Clear Filters</Text>
-                </TouchableOpacity>
-              )}
             </View>
           )}
         </View>

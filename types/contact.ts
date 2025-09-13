@@ -3,14 +3,46 @@ export interface Contact {
   name: string;
   role: string;
   company: string;
-  location: string;
-  avatar: string;
+  email?: string;
+  phone?: string;
+  linkedinUrl?: string;
+  githubUrl?: string;
+  twitterUrl?: string;
+  instagramUrl?: string;
+  websiteUrl?: string;
+  socialMedia: {
+    platform: string;
+    url: string;
+    username?: string;
+  }[];
+  funFacts: string[];
+  whereMet: string;
+  whereFrom: string; // Location/city they're from
+  notes: Note[];
+  encounters: Encounter[];
   tags: string[];
-  notes: string;
-  lastSeen: string;
-  encounters: number;
-  interests: string[];
-  connections: string[];
+}
+
+export interface Note {
+  id: string;
+  content: string;
+  timestamp: Date;
+  isVoiceNote?: boolean;
+}
+
+export interface Encounter {
+  id: string;
+  event: string;
+  location: string;
+  date: Date;
+  notes?: string;
+}
+
+export interface Event {
+  id: string;
+  name: string;
+  date: Date;
+  location: string;
 }
 
 export interface ContactStats {
@@ -18,16 +50,6 @@ export interface ContactStats {
   totalEncounters: number;
   thisWeek: number;
   notes: number;
-}
-
-export interface ContactEvent {
-  id: string;
-  contactId: string;
-  type: 'meeting' | 'call' | 'email' | 'event';
-  date: string;
-  location?: string;
-  notes?: string;
-  tags: string[];
 }
 
 export type FilterType = 'All Events' | 'Meetings' | 'Calls' | 'Emails';

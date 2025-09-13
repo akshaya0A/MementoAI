@@ -1,7 +1,7 @@
 // Fallback for using MaterialIcons on Android and web.
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
+import { SymbolViewProps, SymbolWeight } from 'expo-symbols';
 import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
@@ -18,6 +18,10 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  // Dashboard icons
+  'chart.bar.fill': 'bar-chart',
+  'person.2.fill': 'people',
+  'square.and.arrow.up': 'share',
   // Search screen icons
   'magnifyingglass': 'search',
   'mic': 'mic',
@@ -29,6 +33,43 @@ const MAPPING = {
   'chevron.down': 'keyboard-arrow-down',
   'list.bullet': 'list',
   'square.grid.2x2': 'grid-view',
+  // Export screen icons
+  'person.circle': 'person',
+  'tablecells': 'table-chart',
+  'curlybraces': 'code',
+  'checkmark.circle.fill': 'check-circle',
+  'checkmark.circle': 'check-circle-outline',
+  // Contact card icons
+  'flame': 'local-fire-department',
+  'calendar': 'event',
+  'location': 'place',
+  // Dashboard icons
+  'upload': 'cloud-upload',
+  'download': 'cloud-download',
+  'plus': 'add',
+  'eye': 'visibility',
+  'clock': 'schedule',
+  'users': 'people',
+  // Search screen icons
+  'mic': 'mic',
+  'waveform': 'graphic-eq',
+  'tag': 'local-offer',
+  // ContactDetail icons
+  'pencil': 'edit',
+  'trash': 'delete',
+  'phone': 'phone',
+  'envelope': 'email',
+  'link': 'link',
+  'building.2': 'business',
+  'hand.raised': 'pan-tool',
+  'star': 'star',
+  'note.text': 'note',
+  // Social media icons
+  'code': 'code',
+  'bird': 'pets',
+  'camera': 'camera-alt',
+  'globe': 'language',
+  'arrow.up.right': 'open-in-new',
 } as IconMapping;
 
 /**

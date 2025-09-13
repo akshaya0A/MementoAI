@@ -1,58 +1,58 @@
 export const MementoColors = {
-  primary: '#6366F1', // Purple brand color
-  primaryLight: '#818CF8',
-  primaryDark: '#4F46E5',
-  secondary: '#F1F5F9',
+  primary: '#000000', // Pure black
+  primaryLight: '#404040', // Dark grey
+  primaryDark: '#000000', // Pure black
+  secondary: '#F5F5F5', // Light grey
   
-  background: '#F8FAFC',
-  backgroundSecondary: '#F1F5F9',
-  backgroundCard: '#FFFFFF',
+  background: '#FFFFFF', // Pure white
+  backgroundSecondary: '#F8F8F8', // Very light grey
+  backgroundCard: '#FFFFFF', // Pure white
   
-  textPrimary: '#1E293B',
-  textSecondary: '#64748B',
-  textTertiary: '#94A3B8',
+  textPrimary: '#000000', // Pure black
+  textSecondary: '#666666', // Medium grey
+  textTertiary: '#999999', // Light grey
   
-  border: '#E2E8F0',
+  border: '#E0E0E0', // Light grey border
   
-  success: '#10B981',
-  warning: '#F59E0B',
-  error: '#EF4444',
-  info: '#3B82F6',
+  success: '#000000', // Black for success
+  warning: '#666666', // Grey for warning
+  error: '#000000', // Black for error
+  info: '#666666', // Grey for info
   
-  tagBackground: '#F1F5F9',
+  tagBackground: '#F0F0F0', // Light grey background
   
   // Legacy support for existing components
   text: {
-    primary: '#1E293B',
-    secondary: '#64748B',
-    muted: '#94A3B8',
-    white: '#FFFFFF'
+    primary: '#000000', // Pure black
+    secondary: '#666666', // Medium grey
+    muted: '#999999', // Light grey
+    white: '#FFFFFF' // Pure white
   },
   
   border: {
-    light: '#E2E8F0',
-    medium: '#CBD5E1',
-    dark: '#94A3B8'
+    light: '#E0E0E0', // Light grey
+    medium: '#CCCCCC', // Medium grey
+    dark: '#999999' // Dark grey
   },
   
   stats: {
-    contacts: '#3B82F6', // Blue
-    encounters: '#10B981', // Green  
-    thisWeek: '#F59E0B', // Orange
-    notes: '#8B5CF6'  // Purple
+    contacts: '#000000', // Black
+    encounters: '#333333', // Dark grey
+    thisWeek: '#666666', // Medium grey
+    notes: '#999999' // Light grey
   },
   
   tags: {
-    mit: '#DC2626',
-    ai: '#059669',
-    product: '#7C3AED',
-    mobile: '#0891B2',
-    engineering: '#DC2626',
-    react: '#0891B2',
-    hr: '#7C3AED',
-    dataScience: '#059669',
-    design: '#DC2626',
-    ux: '#7C3AED'
+    mit: '#000000', // Black
+    ai: '#333333', // Dark grey
+    product: '#666666', // Medium grey
+    mobile: '#999999', // Light grey
+    engineering: '#000000', // Black
+    react: '#333333', // Dark grey
+    hr: '#666666', // Medium grey
+    dataScience: '#999999', // Light grey
+    design: '#000000', // Black
+    ux: '#333333' // Dark grey
   }
 };
 
