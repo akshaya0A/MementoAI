@@ -5,3 +5,4 @@ test2.py
 test.py
 *.key
 *.png
+.env
