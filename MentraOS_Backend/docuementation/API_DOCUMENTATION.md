@@ -69,37 +69,48 @@ curl -X POST https://mementoai-backend-528890859039.us-central1.run.app/mintUplo
 
 ---
 
-### 3. Ingest Numeric Arrays
+### 3. Ingest Audio Metadata
 **POST** `/ingestArray`
 
-**Description**: Store numeric arrays (embeddings, sensor data, etc.) directly in Firestore.
+**Description**: Store audio metadata and conversation data from smart glasses in Firestore.
 
 **Request Body**:
 ```json
 {
   "uid": "user123",
   "sessionId": "session456",
-  "itemType": "embedding",
-  "vector": [0.1, 0.2, 0.3, ...],
-  "meta": {
-    "model": "text-embedding-ada-002",
-    "source": "transcription"
-  }
+  "timestamp": 1642723200000,
+  "location": "Conference Room A",
+  "summary": "Meeting with John about project updates",
+  "transcript": "We discussed the quarterly goals and next steps",
+  "confidence": 95,
+  "gpsLocation": [37.7749, -122.4194],
+  "rawTranscript": "Um, so we discussed the, uh, quarterly goals...",
+  "nextSteps": "Follow up on action items",
+  "skills": "project management, communication",
+  "name": "John Smith"
 }
 ```
 
 **Parameters**:
 - `uid` (required): User identifier
 - `sessionId` (required): Session identifier
-- `vector` (required): Array of numbers
-- `itemType` (optional): Type of data (default: "embedding")
-- `meta` (optional): Additional metadata object
+- `timestamp` (required): Timestamp of the conversation
+- `location` (required): Location where conversation took place
+- `summary` (required): Summary of the conversation
+- `transcript` (required): Processed transcript
+- `confidence` (required): Confidence score (0-100)
+- `gpsLocation` (required): GPS coordinates [latitude, longitude]
+- `rawTranscript` (required): Raw unprocessed transcript
+- `nextSteps` (optional): Action items or next steps
+- `skills` (optional): Skills mentioned or demonstrated
+- `name` (optional): Name of person in conversation
 
 **Response**:
 ```json
 {
   "ok": true,
-  "itemId": "1726257600000"
+  "itemId": "1642723200000"
 }
 ```
 
@@ -110,9 +121,13 @@ curl -X POST https://mementoai-backend-528890859039.us-central1.run.app/ingestAr
   -d '{
     "uid": "user123",
     "sessionId": "session456",
-    "itemType": "embedding",
-    "vector": [0.1, 0.2, 0.3, 0.4, 0.5],
-    "meta": {"source": "audio_transcription"}
+    "timestamp": 1642723200000,
+    "location": "Conference Room A",
+    "summary": "Project meeting with team",
+    "transcript": "We discussed Q4 goals",
+    "confidence": 95,
+    "gpsLocation": [37.7749, -122.4194],
+    "rawTranscript": "We, uh, discussed Q4 goals"
   }'
 ```
 
@@ -128,15 +143,14 @@ curl -X POST https://mementoai-backend-528890859039.us-central1.run.app/ingestAr
 {
   "uid": "user123",
   "sessionId": "session456",
-  "itemType": "embedding",
-  "vector": [0.1, 0.2, 0.3, ...], // 512-dimensional face embedding
+  "vector": [0.1, 0.2, 0.3, ...],
   "meta": {
-    "model": "face-recognition-v1",
+    "model": "facenet",
     "modality": "face",
     "identityId": "person_abc123",
-    "quality": 0.95
-  },
-  "name": "John Doe" // Optional name parameter
+    "quality": 0.95,
+    "tenantId": "org_456"
+  }
 }
 ```
 
@@ -144,16 +158,13 @@ curl -X POST https://mementoai-backend-528890859039.us-central1.run.app/ingestAr
 - `uid` (required): User identifier
 - `sessionId` (required): Session identifier
 - `vector` (required): Embedding vector (512 floats for face embeddings)
-- `itemType` (optional): Type of embedding (default: "embedding")
-- `meta` (optional): Metadata including model, modality, identityId, quality
-- `name` (optional): Human-readable name for the embedding
+- `meta` (optional): Metadata including model, modality, identityId, quality, tenantId
 
 **Response**:
 ```json
 {
-  "ok": true,
   "vectorId": "vec_user123_session456_a1b2c3d4",
-  "path": "users/user123/embeddings/vec_user123_session456_a1b2c3d4"
+  "userPath": "users/user123/embeddings/vec_user123_session456_a1b2c3d4"
 }
 ```
 
@@ -169,8 +180,7 @@ curl -X POST https://mementoai-backend-528890859039.us-central1.run.app/ingestEm
       "modality": "face",
       "identityId": "person_001",
       "quality": 0.92
-    },
-    "name": "John Doe"
+    }
   }'
 ```
 
@@ -287,65 +297,8 @@ curl -X POST https://mementoai-backend-528890859039.us-central1.run.app/ingestEm
 
 ---
 
-### 8. Audio Ingestion for Meta Glasses
-**POST** `/ingestAudio`
 
-**Description**: Store processed audio data from Meta glasses with structured metadata.
-
-**Request Body**:
-```json
-{
-  "uid": "user123",
-  "sessionId": "session456",
-  "timestamp": "2025-09-13T20:30:00Z",
-  "location": "Conference Room A",
-  "summary": "Meeting about Q4 planning with marketing team",
-  "transcript": "We discussed the marketing strategy for Q4...",
-  "skills": "project management, strategic planning",
-  "nextSteps": "Schedule follow-up meeting with finance team",
-  "confidence": 85,
-  "contactInfo": "john.doe@company.com, jane.smith@company.com"
-}
-```
-
-**Parameters**:
-- `uid` (required): User identifier
-- `sessionId` (required): Session identifier
-- `timestamp` (required): When the audio was recorded (ISO format)
-- `location` (required): Where the audio was recorded
-- `summary` (required): Summary of the audio content
-- `transcript` (optional): Full transcript of the audio
-- `skills` (optional): Relevant skills mentioned or demonstrated
-- `nextSteps` (optional): Action items or next steps identified
-- `confidence` (optional): Confidence score (integer 0-100)
-- `contactInfo` (optional): Contact information mentioned
-
-**Response**:
-```json
-{
-  "ok": true,
-  "itemId": "1726257600000"
-}
-```
-
-**Example cURL**:
-```bash
-curl -X POST https://mementoai-backend-528890859039.us-central1.run.app/ingestAudio \
-  -H "Content-Type: application/json" \
-  -d '{
-    "uid": "glasses_user_001",
-    "sessionId": "meeting_session_123",
-    "timestamp": "2025-09-13T20:30:00Z",
-    "location": "Conference Room A",
-    "summary": "Q4 planning meeting with marketing team",
-    "transcript": "We need to focus on digital marketing...",
-    "confidence": 90
-  }'
-```
-
----
-
-### 9. Direct File Upload
+### 8. Direct File Upload
 **POST** `/ingest`
 
 **Description**: Upload files directly through multipart form data (alternative to signed URLs).
@@ -460,40 +413,42 @@ const { results } = await searchResponse.json();
 // Results contain similar faces with metadata and distances
 ```
 
-**2. Meta Glasses Audio Processing**:
+**2. Smart Glasses Audio Processing**:
 ```javascript
 // Send processed audio data with metadata
-await fetch('/ingestAudio', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    uid: 'glasses_user_001',
-    sessionId: 'meeting_session_123',
-    timestamp: new Date().toISOString(),
-    location: 'Conference Room A',
-    summary: 'Q4 planning discussion with marketing team',
-    transcript: 'We discussed the marketing strategy for Q4...',
-    skills: 'project management, strategic planning',
-    nextSteps: 'Schedule follow-up with finance team',
-    confidence: 85,
-    contactInfo: 'john.doe@company.com'
-  })
-});
-```
-
-**2. Vision/Image Processing (Vector Embeddings)**:
-```javascript
-// Send image embeddings for vision processing
 await fetch('/ingestArray', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     uid: 'glasses_user_001',
+    sessionId: 'meeting_session_123',
+    timestamp: Date.now(),
+    location: 'Conference Room A',
+    summary: 'Q4 planning discussion with marketing team',
+    transcript: 'We discussed the marketing strategy for Q4...',
+    confidence: 85,
+    gpsLocation: [37.7749, -122.4194],
+    rawTranscript: 'We, uh, discussed the marketing strategy for Q4...',
+    skills: 'project management, strategic planning',
+    nextSteps: 'Schedule follow-up with finance team',
+    name: 'John Smith'
+  })
+});
+```
+
+**3. Vision/Image Processing (Vector Embeddings)**:
+```javascript
+// Send image embeddings for vision processing
+await fetch('/ingestEmbedding', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    uid: 'glasses_user_001',
     sessionId: 'vision_session_456',
-    itemType: 'vision_embedding',
     vector: imageEmbedding, // Array of floats from vision model
     meta: {
-      imageType: 'scene_analysis',
+      modality: 'vision',
+      model: 'vision-transformer-v1',
       objects_detected: ['person', 'laptop', 'whiteboard'],
       location: 'Conference Room A'
     }
@@ -525,15 +480,16 @@ await fetch(uploadUrl, {
 });
 
 // Step 3: Send embedding data
-await fetch('/ingestArray', {
+await fetch('/ingestEmbedding', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     uid: 'glasses_user_001',
     sessionId: 'recording_session_123',
-    itemType: 'audio_embedding',
     vector: audioEmbedding,
     meta: { 
+      modality: 'audio',
+      model: 'audio-embedding-v1',
       relatedItemId: itemId,
       duration: 30.5,
       sampleRate: 44100

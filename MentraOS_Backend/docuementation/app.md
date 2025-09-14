@@ -81,6 +81,35 @@ Direct file upload endpoint for multipart form data (typically from smart glasse
 - Creates Firestore metadata document with "uploaded" status
 - Preserves original filename extension
 
+#### `POST /ingestArray`
+Store audio metadata from smart glasses conversations in Firestore.
+
+**Request Body:**
+```json
+{
+  "uid": "user_id",
+  "sessionId": "session_identifier",
+  "timestamp": 1642723200000,
+  "location": "Conference Room A",
+  "summary": "Meeting with John about project updates",
+  "transcript": "We discussed the quarterly goals and next steps",
+  "confidence": 95,
+  "gpsLocation": [37.7749, -122.4194],
+  "rawTranscript": "Um, so we discussed the, uh, quarterly goals...",
+  "nextSteps": "Follow up on action items",  // optional
+  "skills": "project management, communication",  // optional
+  "name": "John Smith"  // optional
+}
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "itemId": "1642723200000"
+}
+```
+
 #### `POST /ingestEmbedding`
 Store face embeddings in Vertex AI Vector Search with Firestore metadata.
 
@@ -231,6 +260,28 @@ sessions/
 │           └── createdAt: timestamp
 ```
 
+**Audio/Conversation Metadata:**
+```
+sessions/
+├── {sessionId}/
+│   └── items/
+│       └── {timestamp}/
+│           ├── uid: string
+│           ├── sessionId: string
+│           ├── itemType: "audio"
+│           ├── timestamp: number
+│           ├── location: string
+│           ├── summary: string
+│           ├── transcript: string
+│           ├── confidence: number
+│           ├── gpsLocation: [lat, lng]
+│           ├── rawTranscript: string
+│           ├── nextSteps: string (optional)
+│           ├── skills: string (optional)
+│           ├── name: string (optional)
+│           └── createdAt: timestamp
+```
+
 **Vector Embeddings:**
 ```
 users/
@@ -321,12 +372,15 @@ The app is deployed to Google Cloud Run at: https://mementoai-backend-5288908590
 
 ### Use Cases
 
-1. **Smart Glasses Integration**: The `/ingest` endpoint receives files directly from smart glasses devices
+1. **Smart Glasses Integration**: 
+   - `/ingest` endpoint receives files directly from smart glasses devices
+   - `/ingestArray` endpoint stores conversation metadata and transcripts
 2. **Web/Mobile Apps**: The `/mintUploadUrl` endpoint provides secure upload URLs for client applications
 3. **Face Recognition**: Store and search face embeddings using `/ingestEmbedding` and `/searchFaces`
 4. **Identity Management**: Group and search faces by identity using `/searchByIdentity`
-5. **Session Management**: All uploads are organized by user sessions for easy retrieval and processing
-6. **Real-time Processing**: Firestore integration enables real-time triggers for AI processing pipelines
+5. **Conversation Tracking**: Audio metadata and transcripts stored via `/ingestArray` for context recall
+6. **Session Management**: All uploads and conversations organized by user sessions
+7. **Real-time Processing**: Firestore integration enables real-time triggers for AI processing pipelines
 
 ### Security Features
 
