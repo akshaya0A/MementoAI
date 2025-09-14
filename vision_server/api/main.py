@@ -70,13 +70,13 @@ def before_request():
     #print(response.json())
     items = (response.json()['items'])
     for item in items:
-        print(item['uid'])
+        print(item)
         if item['vector'] is not None and item['uid'] is not None:
             known_embeddings.append(item['vector'])
             known_uids.append(item['uid'])
 
-    print('known embeddings:', known_embeddings)
-    print('known uids:', known_uids)
+    # print('known embeddings:', known_embeddings)
+    # print('known uids:', known_uids)
 
 @app.route('/', methods=['GET'])
 def index():
@@ -160,28 +160,26 @@ def upload_file():
                 ]
             }
 
-            #DEBUG
-            # response = requests.post(url, headers=headers, json=data)
-            # if response.status_code == 200:
-            #     result = response.json()
-            #     output = result['content'][0]['text']
+            response = requests.post(url, headers=headers, json=data)
+            if response.status_code == 200:
+                result = response.json()
+                output = result['content'][0]['text']
 
-            #     cleaned = re.search(r"CLEANED:\s*(.*)", output).group(1)
-            #     name = re.search(r"NAME:\s*(.*)", output).group(1) or None
-            #     print(cleaned, name)
+                cleaned = re.search(r"CLEANED:\s*(.*)", output).group(1)
+                name = re.search(r"NAME:\s*(.*)", output).group(1) or None
+                print(cleaned, name)
 
-            #     body = {
-            #         "name": name,
-            #         "raw_text": cleaned,
-            #     }
+                body = {
+                    "name": name,
+                    "raw_text": cleaned,
+                }
 
-            #     #send OCRd text to backend
-            #     #response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/xxx", json=body)
+                #send OCRd text to backend
+                #response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/xxx", json=body)
 
-            # else:
-            #     print(f"Error: {response.status_code}")
-            #     print(response.text)
-
+            else:
+                print(f"Error: {response.status_code}")
+                print(response.text)
         
             # Detect faces
             #frame = cv2.imread(filename)
