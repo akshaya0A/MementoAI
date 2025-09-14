@@ -39,14 +39,14 @@ if (!CLAUDE_API_KEY && !OPENAI_API_KEY) {
 const anthropic = CLAUDE_API_KEY ? new Anthropic({ apiKey: CLAUDE_API_KEY }) : null;
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 
-// Test Claude models availability
-if (anthropic) {
-  anthropic.models.list().then(models => {
-    console.log('Available Claude models:', models.data.map(m => m.id));
-  }).catch(err => {
-    console.error('Error fetching Claude models:', err.message);
-  });
-}
+// Test Claude models availability (commented out for production)
+// if (anthropic) {
+//   anthropic.models.list().then(models => {
+//     console.log('Available Claude models:', models.data.map(m => m.id));
+//   }).catch(err => {
+//     console.error('Error fetching Claude models:', err.message);
+//   });
+// }
 
 // ---------- Event-focused types ----------
 export interface Summary {
@@ -56,6 +56,79 @@ export interface Summary {
   location: string; // Where the person was met (booth, event, etc.)
   next: string; // Follow-up actions or next steps
   conf: number; // 0..1
+}
+
+// ---------- Additional Type Definitions ----------
+interface TranscriptionData {
+  text: string;
+  isFinal: boolean;
+  startTime?: number;
+  endTime?: number;
+  speakerId?: string;
+}
+
+interface VoiceActivityData {
+  status: boolean | "true" | "false";
+}
+
+interface LocationData {
+  latitude: number;
+  longitude: number;
+  accuracy: string;
+  timestamp: string;
+  locationName: string;
+}
+
+interface PhotoData {
+  filename: string;
+  size: number;
+  mimeType: string;
+  buffer: Buffer;
+}
+
+interface BackendPayload {
+  uid: string;
+  sessionId: string;
+  timestamp: string;
+  location: string;
+  summary: string;
+  transcript: string;
+  skills: string;
+  nextSteps: string;
+  confidence: number;
+  contactInfo: string;
+  gpsLocation: LocationData | null;
+  rawTranscript: unknown;
+}
+
+interface JSONData {
+  timestamp: string;
+  contactInfo: string;
+  skills: string[];
+  location: string;
+  nextSteps: string;
+  confidence: number;
+  summary: string;
+  gpsLocation: LocationData | null;
+  transcript: {
+    original: string;
+    cleaned: string;
+    raw: unknown;
+  };
+}
+
+// ---------- Utility Functions ----------
+function sanitizeFilename(filename: string): string {
+  // Remove or replace dangerous characters
+  return filename
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_{2,}/g, '_')
+    .substring(0, 100); // Limit length
+}
+
+function validateFilePath(filePath: string): boolean {
+  // Basic validation to prevent directory traversal
+  return !filePath.includes('..') && !filePath.includes('~') && filePath.length < 500;
 }
 
 // ---------- Event-focused JSON Schema ----------
@@ -95,7 +168,7 @@ const schema = {
 } as const;
 
 const ajv = new Ajv({ allErrors: true, strict: true });
-const validate = ajv.compile(schema as any);
+const validate = ajv.compile(schema);
 
 // ---------- AI tool definitions ----------
 const claudeTool = {
@@ -304,11 +377,12 @@ async function callClaude(
         throw new Error('Invalid JSON from tool');
       }
 
-      return validateInput(parsed, session);
-    } catch (e: any) {
-      const status = e?.status ?? 500;
-      session.logger.error(`[Claude] Request failed (attempt ${attempt}/${maxAttempts}): ${String(e?.message || e)}`);
-      session.logger.error(`[Claude] Error details:`, e);
+      return validateInput(parsed as unknown, session);
+    } catch (error: unknown) {
+      const status = (error as any)?.status ?? 500;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      session.logger.error(`[Claude] Request failed (attempt ${attempt}/${maxAttempts}): ${errorMessage}`);
+      session.logger.error(`[Claude] Error details: ${JSON.stringify(error)}`);
       
       if ((status === 429 || status >= 500) && attempt < maxAttempts) {
         const backoff = 300 * Math.pow(2, attempt - 1);
@@ -318,8 +392,8 @@ async function callClaude(
         await new Promise(r => setTimeout(r, backoff));
         continue;
       }
-      session.logger.error(`[Claude] Request failed: ${String(e?.message || e)}`);
-      throw e;
+      session.logger.error(`[Claude] Request failed: ${errorMessage}`);
+      throw error;
     }
   }
 }
@@ -397,12 +471,11 @@ async function callOpenAI(
       const args = parseJSON((toolCall as any).function.arguments);
       try {
         return validateInput(args, session);
-      } catch (e: any) {
+      } catch (error: unknown) {
         // Validation failed — try a repair pass using the invalid JSON
+        const errorMessage = error instanceof Error ? error.message : String(error);
         session.logger.warn(
-          `[Validate] Invalid JSON from tool. Attempting repair: ${String(
-            e?.message || e
-          ).slice(0, 200)}`
+          `[Validate] Invalid JSON from tool. Attempting repair: ${errorMessage.slice(0, 200)}`
         );
 
         const repairMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
@@ -429,8 +502,9 @@ async function callOpenAI(
         const repairArgs = parseJSON((repairedTool as any).function.arguments);
         return validateInput(repairArgs, session);
       }
-    } catch (e: any) {
-      const status = e?.status ?? 500;
+    } catch (error: unknown) {
+      const status = (error as any)?.status ?? 500;
+      const errorMessage = error instanceof Error ? error.message : String(error);
       if ((status === 429 || status >= 500) && attempt < maxAttempts) {
         const backoff = 300 * Math.pow(2, attempt - 1);
         session.logger.warn(
@@ -439,8 +513,8 @@ async function callOpenAI(
         await new Promise(r => setTimeout(r, backoff));
         continue;
       }
-      session.logger.error(`[OpenAI] Request failed: ${String(e?.message || e)}`);
-      throw e;
+      session.logger.error(`[OpenAI] Request failed: ${errorMessage}`);
+      throw error;
     }
   }
 }
@@ -454,36 +528,40 @@ function parseJSON(s: string): unknown {
 }
 
 function validateInput(input: unknown, session: AppSession): Summary {
+  // Type guard to check if input has expected structure
+  const isSummaryLike = (obj: unknown): obj is Partial<Summary> => {
+    return typeof obj === 'object' && obj !== null;
+  };
+
+  if (!isSummaryLike(input)) {
+    throw new Error('Invalid input: expected object');
+  }
+
   // Basic coercions: ensure arrays and defaults
-  const cleaned = {
-    info: (input as any)?.info ?? '',
-    contact: (input as any)?.contact ?? '',
-    skills: Array.isArray((input as any)?.skills)
-      ? (input as any).skills
-      : [],
-    location: (input as any)?.location ?? '',
-    next: (input as any)?.next ?? '',
-    conf:
-      typeof (input as any)?.conf === 'number'
-        ? (input as any).conf
-        : 0.5,
+  const cleaned: Summary = {
+    info: input.info ?? '',
+    contact: input.contact ?? '',
+    skills: Array.isArray(input.skills) ? input.skills : [],
+    location: input.location ?? '',
+    next: input.next ?? '',
+    conf: typeof input.conf === 'number' ? input.conf : 0.5,
   };
 
   const valid = validate(cleaned);
   if (!valid) {
-    const err = ajv.errorsText(validate.errors as any, {
+    const err = ajv.errorsText(validate.errors, {
       separator: '; ',
     });
     session.logger.error(`[Validate] Invalid summary JSON: ${err}`);
     throw new Error(`Invalid summary JSON: ${err}`);
   }
-  return cleaned as Summary;
+  return cleaned;
 }
 
 // ---------- Mentra app wiring ----------
 type Unsubscribe = () => void;
 
-function setupPipeline(session: AppSession) {
+function setupPipeline(session: AppSession, sessionLocation: LocationData | null) {
   // --- STATE ---
   let armed = false;           // after wake phrase
   let collecting = false;      // currently recording
@@ -496,9 +574,14 @@ function setupPipeline(session: AppSession) {
   const SILENCE_MS = 120_000; // 2 minutes
 
   const resetIdleTimer = () => {
-    if (idleTimeout) clearTimeout(idleTimeout);
+    if (idleTimeout) {
+      clearTimeout(idleTimeout);
+      idleTimeout = null;
+    }
     idleTimeout = setTimeout(() => {
-      if (collecting) finishNote("silence-timeout");
+      if (collecting) {
+        finishNote("silence-timeout");
+      }
     }, SILENCE_MS);
   };
 
@@ -575,11 +658,16 @@ function setupPipeline(session: AppSession) {
         const contactName = summary.contact ? 
           summary.contact.split(/[@,\s]/)[0].toLowerCase().replace(/[^a-z0-9]/g, '') : 
           'unknown';
-        const filename = `contact-${contactName}-${today}.json`;
+        const filename = sanitizeFilename(`contact-${contactName}-${today}.json`);
         const filepath = join(outputDir, filename);
         
-        // Get location using MentraOS best practices
-        const locationData = await getLocation(session);
+        // Validate file path for security
+        if (!validateFilePath(filepath)) {
+          throw new Error('Invalid file path detected');
+        }
+        
+        // Use session-specific location
+        const locationData = sessionLocation;
         
         // Create JSON data structure
         const jsonData = {
@@ -638,8 +726,9 @@ function setupPipeline(session: AppSession) {
       await session.audio.speak(output);
       session.layouts.showTextWall(`Summary\n\n${output}`);
       
-    } catch (err) {
-      session.logger.error(`[Pipeline] Error: ${(err as Error).message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      session.logger.error(`[Pipeline] Error: ${errorMessage}`);
       await session.audio.speak("Sorry, something went wrong summarizing.");
       session.layouts.showTextWall("Error summarizing");
     } finally {
@@ -650,13 +739,7 @@ function setupPipeline(session: AppSession) {
 
   // ============== Transcription handling ===================================
 
-  const onTranscription = (data: {
-    text: string; 
-    isFinal: boolean;
-    startTime?: number;
-    endTime?: number;
-    speakerId?: string;
-  }) => {
+  const onTranscription = (data: TranscriptionData) => {
     // Ignore all transcription if we're processing
     if (processing) {
       return;
@@ -676,7 +759,11 @@ function setupPipeline(session: AppSession) {
     if (!armed) {
       if (lower.includes((WAKE_WORD || 'start recording').toLowerCase())) {
         armed = true;
-        session.logger.info("Wake phrase detected. Starting recorder.");
+        session.logger.info("Wake phrase detected. Starting recorder and capturing photo.");
+        
+        // Capture photo when wake word is detected
+        capturePhotoOnWakeWord(session);
+        
         startCollection();
       }
       return;
@@ -691,12 +778,20 @@ function setupPipeline(session: AppSession) {
     const STOP_PHRASES = ["done", "that's it", "stop recording", "stop"];
     const hasStop = STOP_PHRASES.some((p) => lower.includes(p));
     if (hasStop && (isFinal || lower.endsWith("done") || lower.endsWith("stop"))) {
-
+      session.logger.info("🛑 Stop phrase detected - immediately stopping all recording");
+      
       // Immediately stop all recording and processing
       collecting = false;
       armed = false;
       processing = true; // Set processing flag immediately to block new events
       if (idleTimeout) { clearTimeout(idleTimeout); idleTimeout = null; }
+      
+      // Clear any pending transcription updates
+      partial = "";
+      
+      // Immediately update UI to show processing
+      session.layouts.showTextWall("🛑 Processing conversation...");
+      
       void finishNote("user-stopped");
       return;
     }
@@ -715,22 +810,20 @@ function setupPipeline(session: AppSession) {
 
   // ============== Voice Activity Detection ===================================
 
-  const onVoiceActivity = (data: { status: boolean | "true" | "false" }) => {
-    // Ignore all VAD if we're processing
-    if (processing) {
+  const onVoiceActivity = (data: VoiceActivityData) => {
+    // Ignore all VAD if we're processing or not collecting
+    if (processing || !collecting) {
+      session.logger.debug(`VAD ignored - processing: ${processing}, collecting: ${collecting}`);
       return;
     }
 
     const isSpeaking = data.status === true || data.status === "true";
     
     session.logger.info(`Voice Activity: ${isSpeaking ? 'Speaking' : 'Silent'}`, {
-      status: data.status
+      status: data.status,
+      processing,
+      collecting
     } as any);
-
-    // Only process VAD if we're actively collecting
-    if (!collecting) {
-      return;
-    }
 
     // Update visual indicator based on voice activity
     const live = liveNoteText();
@@ -755,8 +848,9 @@ function setupPipeline(session: AppSession) {
     stop: async () => {
       try {
         await session.audio.stopAudio();
-      } catch (e) {
-        session.logger.warn(`[Audio] Stop audio failed: ${(e as Error).message}`);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        session.logger.warn(`[Audio] Stop audio failed: ${errorMessage}`);
       }
     },
   };
@@ -765,73 +859,187 @@ function setupPipeline(session: AppSession) {
 // Track if greeting has been spoken to prevent duplicates
 let greetingSpoken = false;
 
-// Function to get location using MentraOS best practices
-async function getLocation(session: AppSession): Promise<any> {
-  return new Promise((resolve) => {
-    console.log('🔍 Starting location capture...');
+// Function to capture photo when wake word is detected
+async function capturePhotoOnWakeWord(session: AppSession): Promise<void> {
+  try {
+    // console.log('📸 Wake word detected - capturing photo...');
+    const photo = await session.camera.requestPhoto();
+
+    // console.log(`Photo captured on wake word: ${photo.filename}`);
+    // console.log(`Size: ${photo.size} bytes`);
+    // console.log(`Type: ${photo.mimeType}`);
+
+    // Save to file locally
+    const filename = sanitizeFilename(`wake_word_photo_${Date.now()}.jpg`);
+    const outputDir = join(process.cwd(), 'output');
+    mkdirSync(outputDir, { recursive: true });
+    const filepath = join(outputDir, filename);
     
-    // Try getLatestLocation first (most efficient)
-    session.location.getLatestLocation({ accuracy: 'kilometer' })
-      .then((currentLocation) => {
-        console.log('📍 Raw location data from getLatestLocation:', currentLocation);
+    // Validate file path for security
+    if (!validateFilePath(filepath)) {
+      throw new Error('Invalid file path detected');
+    }
+    
+    writeFileSync(filepath, photo.buffer);
+    session.logger.info(`Wake word photo saved: ${filename}`);
+
+    // Send to external API
+    await uploadPhotoToAPI(photo.buffer, photo.mimeType, session);
+    
+    // console.log('✅ Photo captured and saved on wake word');
+    
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('❌ Failed to capture photo on wake word:', error);
+    session.logger.error(`Wake word photo capture failed: ${errorMessage}`);
+  }
+}
+
+// Function to upload photo to API (shared between wake word and button press)
+async function uploadPhotoToAPI(buffer: Buffer, mimeType: string, session: AppSession): Promise<void> {
+  try {
+    // console.log("Uploading photo to API...");
+    const formData = new FormData();
+    const filename = `photo_${Date.now()}.jpg`;
+    formData.append('photo', new Blob([buffer], { type: mimeType }), filename);
+    
+    const response = await fetch('http://127.0.0.1:5000/upload', { 
+      method: 'POST', 
+      body: formData 
+    });
+    
+    if (response.ok) {
+      // console.log("Photo uploaded successfully");
+      session.logger.info("Photo uploaded to API successfully");
+    } else {
+      // console.error(`Photo upload failed: ${response.status}`);
+      session.logger.error(`Photo upload failed: ${response.status}`);
+    }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Failed to upload photo:", error);
+    session.logger.error(`Photo upload error: ${errorMessage}`);
+  }
+}
+
+// Function to get location name from coordinates using AI
+async function getLocationName(latitude: number, longitude: number, session: AppSession): Promise<string> {
+  try {
+    // console.log(`🗺️ Getting location name for coordinates: ${latitude}, ${longitude}`);
+    
+    const prompt = `Given the coordinates ${latitude}, ${longitude}, provide a concise, human-readable location name. This should be specific enough to identify where someone is (e.g., "Tech Conference Center, San Francisco" or "MIT Campus, Cambridge, MA" or "Downtown Seattle Convention Center"). Return only the location name, no additional text.`;
+    
+    // Try Claude first if available
+    if (anthropic) {
+      try {
+        const response = await anthropic.messages.create({
+          model: CLAUDE_MODEL || 'claude-3-5-haiku-20241022',
+          max_tokens: 100,
+          temperature: 0.1,
+          messages: [{ role: 'user', content: prompt }]
+        });
         
-        if (currentLocation && currentLocation.lat && currentLocation.lng) {
-          const locationData = {
-            latitude: currentLocation.lat,
-            longitude: currentLocation.lng,
-            accuracy: 'kilometer',
-            timestamp: new Date().toISOString()
-          };
-          console.log(`📍 Location captured: ${currentLocation.lat}, ${currentLocation.lng}`);
-          resolve(locationData);
-        } else {
-          console.warn('⚠️ getLatestLocation returned incomplete data:', currentLocation);
-          resolve(null);
-        }
-      })
-      .catch((err) => {
-        console.error('❌ getLatestLocation failed:', (err as Error).message);
-        
-        // Fallback: Try continuous stream for a few seconds
-        console.log('🔄 Trying continuous location stream as fallback...');
-        let locationReceived = false;
-        
-        const unsubscribe = session.location.subscribeToStream(
-          { accuracy: 'kilometer' },
-          (data) => {
-            if (!locationReceived && data && data.lat && data.lng) {
-              locationReceived = true;
-              console.log('📍 Location from stream:', data);
-              
-              const locationData = {
-                latitude: data.lat,
-                longitude: data.lng,
-                accuracy: 'kilometer',
-                timestamp: new Date().toISOString()
-              };
-              
-              unsubscribe(); // Stop the stream
-              resolve(locationData);
-            }
-          }
-        );
-        
-        // Timeout after 5 seconds
-        setTimeout(() => {
-          if (!locationReceived) {
-            console.warn('⏰ Location stream timeout');
-            unsubscribe();
+        const locationName = response.content[0]?.type === 'text' ? response.content[0].text.trim() : 'Unknown Location';
+        // console.log(`📍 AI location name: ${locationName}`);
+        return locationName;
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`[Claude] Location name failed, trying OpenAI: ${errorMessage}`);
+      }
+    }
+    
+    // Fallback to OpenAI
+    if (openai) {
+      const response = await openai.chat.completions.create({
+        model: OPENAI_MODEL || 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 100,
+        temperature: 0.1
+      });
+      
+      const locationName = response.choices[0]?.message?.content?.trim() || 'Unknown Location';
+      // console.log(`📍 AI location name: ${locationName}`);
+      return locationName;
+    }
+    
+    return 'Unknown Location';
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('❌ Failed to get location name:', errorMessage);
+    return 'Unknown Location';
+  }
+}
+
+
+// COMMENTED OUT: Continuous location stream approach (following MentraOS docs exactly)
+/*
+async function getContinuousLocation(session: AppSession): Promise<any> {
+  return new Promise((resolve, reject) => {
+    console.log('🔍 Starting continuous location stream...');
+    
+    let locationReceived = false;
+    const timeout = setTimeout(() => {
+      if (!locationReceived) {
+        console.error('⏰ Location stream timeout');
+        reject(new Error('Location stream timeout'));
+      }
+    }, 10000); // 10 second timeout
+    
+    const unsubscribe = session.location.subscribeToStream({
+      accuracy: 'realtime',
+      onLocationUpdate: async (location) => {
+        if (!locationReceived) {
+          locationReceived = true;
+          clearTimeout(timeout);
+          unsubscribe();
+          
+          console.log('📍 Continuous location update:', JSON.stringify(location));
+          
+          if (location && location.lat && location.lng) {
+            // Get AI-powered location name
+            const locationName = await getLocationName(location.lat, location.lng, session);
+            
+            const locationData = {
+              latitude: location.lat,
+              longitude: location.lng,
+              accuracy: location.accuracy || 'realtime',
+              timestamp: new Date().toISOString(),
+              locationName: locationName
+            };
+            
+            console.log(`📍 Continuous location captured: ${location.lat}, ${location.lng} - ${locationName}`);
+            resolve(locationData);
+          } else {
+            console.warn('⚠️ Continuous location returned incomplete data:', location);
             resolve(null);
           }
-        }, 5000);
-      });
+        }
+      }
+    });
   });
+}
+*/
+
+// Function to get placeholder location (Boston, MIT)
+async function getPlaceholderLocation(): Promise<LocationData> {
+  // console.log('📍 Using placeholder location: Boston, MIT');
+  
+  const locationData = {
+    latitude: 42.3601,
+    longitude: -71.0942,
+    accuracy: 'placeholder',
+    timestamp: new Date().toISOString(),
+    locationName: 'MIT Campus, Cambridge, MA'
+  };
+  
+  // console.log(`📍 Placeholder location: ${locationData.latitude}, ${locationData.longitude} - ${locationData.locationName}`);
+  return locationData;
 }
 
 // Function to send JSON data to backend API
-async function sendToBackend(jsonData: any, session: AppSession): Promise<boolean> {
+async function sendToBackend(jsonData: JSONData, session: AppSession): Promise<boolean> {
   try {
-    console.log('🚀 Sending networking data to backend API...');
+    // console.log('🚀 Sending networking data to backend API...');
     
     // Transform our JSON data to match the /ingestAudio endpoint format
     const backendPayload = {
@@ -863,28 +1071,69 @@ async function sendToBackend(jsonData: any, session: AppSession): Promise<boolea
     }
 
     const result = await response.json();
-    console.log('✅ Data sent to backend successfully:', result);
+    // console.log('✅ Data sent to backend successfully:', result);
     return true;
-  } catch (error) {
-    console.error('❌ Failed to send data to backend:', (error as Error).message);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('❌ Failed to send data to backend:', errorMessage);
     return false;
   }
 }
 
 async function onStart(session: AppSession) {
+  // ABSOLUTELY FIRST: Get location before ANYTHING else
+  // console.log('🚀 Getting location FIRST before any other setup...');
+  let sessionLocation = null;
+  
+  try {
+    // For now, use placeholder location (Boston, MIT)
+    sessionLocation = await getPlaceholderLocation();
+    
+    // COMMENTED OUT: Real location capture
+    // sessionLocation = await getContinuousLocation(session);
+    
+    if (sessionLocation) {
+      // console.log(`✅ Location captured FIRST: ${sessionLocation.latitude}, ${sessionLocation.longitude} - ${sessionLocation.locationName}`);
+    } else {
+      // console.log('⚠️ Location capture failed - continuing without location');
+    }
+  } catch (locationError: unknown) {
+    const errorMessage = locationError instanceof Error ? locationError.message : String(locationError);
+    console.error('❌ Location capture error:', errorMessage);
+  }
+
+  // NOW: Do all other session setup after location is captured
   session.logger.info(`[Session] Started: ${Date.now()}`);
+  
+  // Greet user with location info
+  if (sessionLocation) {
+    try {
+      await session.audio.speak(`Location captured at ${sessionLocation.locationName}. Event networking assistant ready.`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      session.logger.warn(`[Audio] Location greeting failed: ${errorMessage}`);
+    }
+  } else {
+    try {
+      await session.audio.speak("Event networking assistant ready. Location unavailable.");
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      session.logger.warn(`[Audio] Fallback greeting failed: ${errorMessage}`);
+    }
+  }
 
   // Greet user with wake word info (only once)
   if (!greetingSpoken) {
     try {
-      await session.audio.speak(`Event networking assistant ready. Say "${WAKE_WORD}" to start capturing conversation details.`);
+      await session.audio.speak(`Say "${WAKE_WORD}" to start capturing conversation details.`);
       greetingSpoken = true;
-  } catch (e) {
-    session.logger.warn(`[Audio] Greeting speak failed: ${(e as Error).message}`);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    session.logger.warn(`[Audio] Greeting speak failed: ${errorMessage}`);
     }
   }
 
-  const pipeline = setupPipeline(session);
+  const pipeline = setupPipeline(session, sessionLocation);
 
   // Cleanup on session end
   session.on('close', async () => {
@@ -892,9 +1141,10 @@ async function onStart(session: AppSession) {
       pipeline.unsubscribe();
       await pipeline.stop(); // Use the improved stop function
       session.logger.info('[Session] Cleaned up subscriptions and audio.');
-    } catch (e) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       session.logger.warn(
-        `[Session] Cleanup error: ${(e as Error).message}`
+        `[Session] Cleanup error: ${errorMessage}`
       );
     }
   });
@@ -903,7 +1153,65 @@ async function onStart(session: AppSession) {
 // ---------- Custom App Server Implementation ----------
 class Server extends AppServer {
   protected async onSession(session: AppSession, sessionId: string, userId: string): Promise<void> {
+    console.log(`User ${userId} connected`);
+    
+    // Start the networking assistant functionality
     await onStart(session);
+    
+    // Subscribe to button press events for photo capture
+    const unsubscribePhoto = session.events.onButtonPress(async (data) => {
+      // console.log('Button pressed - capturing photo');
+      await this.processPhoto(session);
+    });
+
+    // Add cleanup handler for photo events
+    this.addCleanupHandler(unsubscribePhoto);
+  }
+
+  // Photo processing and uploading to API (button press)
+  private async processPhoto(session: AppSession): Promise<void> {
+    try {
+      // console.log('📸 Button pressed - requesting photo from smart glasses...');
+      const photo = await session.camera.requestPhoto(); // default size is medium
+
+      // console.log(`Photo captured on button press: ${photo.filename}`);
+      // console.log(`Size: ${photo.size} bytes`);
+      // console.log(`Type: ${photo.mimeType}`);
+
+      // Convert to base64 for storage or transmission
+      const base64String = photo.buffer.toString('base64');
+      session.logger.info(`Photo as base64 (first 50 chars): ${base64String.substring(0, 50)}...`);
+
+      // Save to file locally
+      const filename = sanitizeFilename(`button_photo_${Date.now()}.jpg`);
+      const outputDir = join(process.cwd(), 'output');
+      mkdirSync(outputDir, { recursive: true });
+      const filepath = join(outputDir, filename);
+      
+      // Validate file path for security
+      if (!validateFilePath(filepath)) {
+        throw new Error('Invalid file path detected');
+      }
+      
+      writeFileSync(filepath, photo.buffer);
+      session.logger.info(`Button photo saved: ${filename}`);
+
+      // Send to external API using shared function
+      await uploadPhotoToAPI(photo.buffer, photo.mimeType, session);
+      
+      // Notify user
+      await session.audio.speak("Photo captured and saved.");
+      
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      session.logger.error(`Failed to process photo: ${errorMessage}`);
+      try {
+        await session.audio.speak("Sorry, photo capture failed.");
+      } catch (audioError: unknown) {
+        const audioErrorMessage = audioError instanceof Error ? audioError.message : String(audioError);
+        session.logger.warn(`Audio feedback failed: ${audioErrorMessage}`);
+      }
+    }
   }
 }
 
@@ -927,11 +1235,12 @@ async function main() {
   });
 
   await server.start();
-  console.log(`MementoAI app server listening on :${PORT}`);
+  // console.log(`MementoAI app server listening on :${PORT}`);
 }
 
-main().catch(err => {
-  console.error(`Fatal: ${(err as Error).message}`);
+main().catch(error => {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  console.error(`Fatal: ${errorMessage}`);
   process.exit(1);
 });
 
