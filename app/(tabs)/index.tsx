@@ -3,6 +3,7 @@ import { ContactForm } from '@/components/ContactForm';
 import { StatCard } from '@/components/StatCard';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '@/constants/mementoTheme';
+import FirebaseConnectionTest from '@/examples/FirebaseConnectionTest';
 import { useFirebaseContacts } from '@/hooks/useFirebaseContacts';
 import { Contact } from '@/types/contact';
 import React, { useState } from 'react';
@@ -12,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 export default function DashboardScreen() {
   const { contacts, loading, error, addContact, updateContact, deleteContact } = useFirebaseContacts();
   const [showAddContact, setShowAddContact] = useState(false);
+  const [showFirebaseTest, setShowFirebaseTest] = useState(false);
 
   // Get recent encounters (last 8)
   const recentContacts = [...contacts]
@@ -113,6 +115,12 @@ export default function DashboardScreen() {
             <Text style={styles.title}>MementoAI</Text>
           </View>
           <View style={styles.headerRight}>
+            <TouchableOpacity 
+              style={styles.headerButton} 
+              onPress={() => setShowFirebaseTest(!showFirebaseTest)}
+            >
+              <Text style={styles.headerButtonText}>🔥</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.headerButton}>
               <Text style={styles.headerButtonText}>⚙️</Text>
             </TouchableOpacity>
@@ -122,13 +130,20 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {/* Firebase Connection Test */}
+        {showFirebaseTest && (
+          <View style={styles.firebaseTestContainer}>
+            <FirebaseConnectionTest />
+          </View>
+        )}
+
         {/* Dashboard Title */}
         <View style={styles.dashboardHeader}>
           <Text style={styles.dashboardTitle}>Dashboard</Text>
           <Text style={styles.dashboardSubtitle}>Manage your professional contacts and encounters</Text>
           <View style={styles.actionButtons}>
             <TouchableOpacity style={styles.importButton} onPress={handleImportContacts}>
-              <IconSymbol name="upload" size={16} color={MementoColors.text.primary} />
+              <IconSymbol name="arrow.up.circle" size={16} color={MementoColors.text.primary} />
               <Text style={styles.importButtonText}>Import</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.addContactButton} onPress={() => setShowAddContact(true)}>
@@ -136,7 +151,7 @@ export default function DashboardScreen() {
               <Text style={styles.addContactButtonText}>Add Contact</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.exportButton} onPress={handleExportContacts}>
-              <IconSymbol name="download" size={16} color={MementoColors.text.primary} />
+              <IconSymbol name="arrow.down.circle" size={16} color={MementoColors.text.primary} />
               <Text style={styles.exportButtonText}>Export vCard</Text>
             </TouchableOpacity>
           </View>
@@ -245,14 +260,14 @@ export default function DashboardScreen() {
 
           {recentContacts.length === 0 ? (
             <View style={styles.emptyState}>
-              <IconSymbol name="users" size={48} color={MementoColors.text.muted} />
+              <IconSymbol name="person.2" size={48} color={MementoColors.text.muted} />
               <Text style={styles.emptyStateTitle}>No contacts yet</Text>
               <Text style={styles.emptyStateText}>
                 Start building your network by importing contacts or adding them manually
               </Text>
               <View style={styles.emptyStateActions}>
                 <TouchableOpacity style={styles.emptyStateButton}>
-                  <IconSymbol name="upload" size={16} color={MementoColors.text.white} />
+                  <IconSymbol name="arrow.up.circle" size={16} color={MementoColors.text.white} />
                   <Text style={styles.emptyStateButtonText}>Import Contacts</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.emptyStateButtonSecondary}>
@@ -311,7 +326,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: MementoFontSizes.md,
-    color: MementoColors.text.error,
+    color: MementoColors.error,
     textAlign: 'center',
     marginBottom: MementoSpacing.md,
   },
@@ -538,5 +553,13 @@ const styles = StyleSheet.create({
     color: MementoColors.primary,
     fontWeight: '600',
     marginLeft: MementoSpacing.xs,
+  },
+  firebaseTestContainer: {
+    backgroundColor: MementoColors.backgroundCard,
+    margin: MementoSpacing.md,
+    borderRadius: MementoBorderRadius.lg,
+    borderWidth: 1,
+    borderColor: MementoColors.border.light,
+    maxHeight: 400,
   },
 });
