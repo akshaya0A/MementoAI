@@ -1,0 +1,52 @@
+# TRA Environment Configuration
+# Copy this file to .env and update with your values
+
+# API Settings
+APP_NAME=Talent Resolution Agent (TRA)
+APP_VERSION=1.0.0
+DEBUG=false
+HOST=0.0.0.0
+PORT=8000
+
+# Database Settings
+DATABASE_URL=postgresql://user:password@localhost:5432/tra_db
+PGVECTOR_EXTENSION=true
+
+# LLM Settings
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+ANTHROPIC_MODEL=claude-3-sonnet
+
+# Web Search Settings
+USE_DUCKDUCKGO=true
+USE_ANTHROPIC_AI=true
+
+# Processing Settings
+MAX_CONCURRENT_SOURCES=10
+PROCESSING_TIMEOUT=300
+RETRY_ATTEMPTS=3
+RETRY_DELAY=5
+
+# Validation Settings
+MIN_CONFIDENCE_SCORE=0.6
+MAX_CONTRADICTIONS=5
+FUZZY_MATCH_THRESHOLD=0.8
+
+# Extraordinary Index Weights
+INNOVATION_WEIGHT=0.25
+ADOPTION_WEIGHT=0.20
+INFLUENCE_WEIGHT=0.25
+VELOCITY_WEIGHT=0.15
+SELECTIVITY_WEIGHT=0.15
+
+# Audit Settings
+AUDIT_ENABLED=true
+AUDIT_RETENTION_DAYS=365
+LOG_LEVEL=INFO
+
+# Security Settings
+ENABLE_CORS=true
+CORS_ORIGINS=["*"]
+API_KEY_REQUIRED=false
+API_KEY_HEADER=X-API-Key
