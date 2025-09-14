@@ -1,7 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, TextInput } from 'react-native';
-import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing, MementoShadows } from '@/constants/mementoTheme';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useRouter } from 'expo-router';
+import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing, MementoShadows } from '../constants/mementoTheme';
+import { IconSymbol } from './ui/icon-symbol';
 
 interface DesktopLayoutProps {
   children: React.ReactNode;
@@ -20,6 +21,11 @@ export function DesktopLayout({
   subtitle, 
   headerActions 
 }: DesktopLayoutProps) {
+  const router = useRouter();
+
+  const handleProfilePress = () => {
+    router.push('/profile');
+  };
   const navigationItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'house' },
     { id: 'contacts', label: 'Contacts', icon: 'person.2' },
@@ -90,7 +96,7 @@ export function DesktopLayout({
             <TouchableOpacity style={styles.headerIconButton}>
               <IconSymbol name="gearshape" size={20} color={MementoColors.text.secondary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.headerIconButton}>
+            <TouchableOpacity style={styles.headerIconButton} onPress={handleProfilePress}>
               <IconSymbol name="person.circle" size={20} color={MementoColors.text.secondary} />
             </TouchableOpacity>
           </View>

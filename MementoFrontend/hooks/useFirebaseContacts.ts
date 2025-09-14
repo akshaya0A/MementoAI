@@ -2,6 +2,7 @@ import { addContact, deleteContact, getContacts, updateContact } from '@/lib/fir
 import { Contact } from '@/types/contact';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useState, useCallback } from 'react';
+import { mockContacts } from '@/data/sampleContacts';
 
 export const useFirebaseContacts = () => {
   const { user } = useAuth();
@@ -11,19 +12,26 @@ export const useFirebaseContacts = () => {
 
   // Load contacts from Firebase
   const loadContacts = useCallback(async () => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    
     try {
       setLoading(true);
       setError(null);
+      
+      if (!user) {
+        // Use sample data when no user is authenticated
+        console.log('No user authenticated, using sample contacts');
+        setContacts(mockContacts);
+        setLoading(false);
+        return;
+      }
+      
       const firebaseContacts = await getContacts(user.id);
       setContacts(firebaseContacts);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load contacts');
-      console.error('Error loading contacts:', err);
+      console.error('Error loading contacts from Firebase:', err);
+      // Fallback to sample data if Firebase fails
+      console.log('Firebase failed, using sample contacts as fallback');
+      setContacts(mockContacts);
+      setError('Using sample data - Firebase connection failed');
     } finally {
       setLoading(false);
     }
@@ -87,13 +95,8 @@ export const useFirebaseContacts = () => {
 
   // Load contacts on mount and when user changes
   useEffect(() => {
-    if (user) {
-      loadContacts();
-    } else {
-      setContacts([]);
-      setLoading(false);
-    }
-  }, [user, loadContacts]);
+    loadContacts();
+  }, [loadContacts]);
 
   return {
     contacts,

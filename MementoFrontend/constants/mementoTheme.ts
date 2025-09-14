@@ -1,74 +1,74 @@
 export const MementoColors = {
-  // Professional neutral color palette
-  primary: '#2563EB', // Professional blue
-  primaryLight: '#3B82F6', // Light blue
-  primaryDark: '#1D4ED8', // Dark blue
-  secondary: '#374151', // Sophisticated slate
+  // Black and white color palette
+  primary: '#000000', // Pure black
+  primaryLight: '#374151', // Dark grey
+  primaryDark: '#000000', // Pure black
+  secondary: '#6B7280', // Medium grey
   tertiary: '#059669', // Professional green accent
   
   // Background colors - Clean whites and greys
   background: '#FFFFFF', // Pure white
-  backgroundSecondary: '#F8FAFC', // Very light grey
+  backgroundSecondary: '#F9FAFB', // Very light grey
   backgroundCard: '#FFFFFF', // White cards
-  backgroundSidebar: '#F1F5F9', // Light grey sidebar
-  backgroundGradient: ['#FFFFFF', '#F8FAFC'], // Subtle gradient
+  backgroundSidebar: '#F3F4F6', // Light grey sidebar
+  backgroundGradient: ['#FFFFFF', '#F9FAFB'], // Subtle gradient
   
-  // Text colors - Professional blacks and greys
-  textPrimary: '#0F172A', // Very dark slate
-  textSecondary: '#334155', // Dark slate
-  textTertiary: '#64748B', // Medium slate
-  textMuted: '#94A3B8', // Light slate
+  // Text colors - Black and greys
+  textPrimary: '#000000', // Pure black
+  textSecondary: '#374151', // Dark grey
+  textTertiary: '#6B7280', // Medium grey
+  textMuted: '#9CA3AF', // Light grey
   
   // Border colors - Clean and minimal
-  border: '#E2E8F0', // Light slate border
-  borderLight: '#F1F5F9', // Very light border
-  borderMedium: '#CBD5E1', // Medium border
-  borderDark: '#64748B', // Dark slate border
+  border: '#E5E7EB', // Light grey border
+  borderLight: '#F3F4F6', // Very light border
+  borderMedium: '#D1D5DB', // Medium border
+  borderDark: '#6B7280', // Dark grey border
   
   // Status colors - Professional palette
   success: '#059669', // Professional green
   warning: '#D97706', // Professional amber
   error: '#DC2626', // Professional red
-  info: '#0EA5E9', // Professional blue
+  info: '#6B7280', // Medium grey
   
   // Accent colors - Minimal and professional
-  accent: '#2563EB', // Professional blue accent
-  accentLight: '#3B82F6', // Light blue
+  accent: '#000000', // Pure black accent
+  accentLight: '#374151', // Dark grey
   
   // Legacy support for existing components
   text: {
-    primary: '#0F172A', // Very dark slate
-    secondary: '#334155', // Dark slate
-    muted: '#64748B', // Medium slate
+    primary: '#000000', // Pure black
+    secondary: '#374151', // Dark grey
+    muted: '#6B7280', // Medium grey
     white: '#FFFFFF' // White
   },
   
   border: {
-    light: '#F1F5F9', // Very light border
-    medium: '#CBD5E1', // Medium border
-    dark: '#64748B' // Dark slate border
+    light: '#F3F4F6', // Very light border
+    medium: '#D1D5DB', // Medium border
+    dark: '#6B7280' // Dark grey border
   },
   
-  // Stats colors - Consistent professional palette
+  // Stats colors - Black and white palette
   stats: {
-    contacts: '#2563EB', // Professional blue
-    encounters: '#059669', // Professional green
-    thisWeek: '#0EA5E9', // Professional blue
-    notes: '#D97706' // Professional amber
+    contacts: '#000000', // Pure black
+    encounters: '#374151', // Dark grey
+    thisWeek: '#6B7280', // Medium grey
+    notes: '#9CA3AF' // Light grey
   },
   
-  // Tags colors - Subtle professional palette
+  // Tags colors - Black and white palette
   tags: {
-    mit: '#2563EB', // Professional blue
-    ai: '#059669', // Professional green
-    product: '#0EA5E9', // Professional blue
-    mobile: '#D97706', // Professional amber
-    engineering: '#2563EB', // Professional blue
-    react: '#059669', // Professional green
-    hr: '#0EA5E9', // Professional blue
-    dataScience: '#2563EB', // Professional blue
-    design: '#D97706', // Professional amber
-    ux: '#2563EB' // Professional blue
+    mit: '#000000', // Pure black
+    ai: '#374151', // Dark grey
+    product: '#6B7280', // Medium grey
+    mobile: '#9CA3AF', // Light grey
+    engineering: '#000000', // Pure black
+    react: '#374151', // Dark grey
+    hr: '#6B7280', // Medium grey
+    dataScience: '#000000', // Pure black
+    design: '#374151', // Dark grey
+    ux: '#6B7280' // Medium grey
   }
 };
 

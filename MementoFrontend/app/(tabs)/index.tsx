@@ -1,13 +1,9 @@
-import { ContactCard } from '@/components/ContactCard';
-import { ContactForm } from '@/components/ContactForm';
-import { StatCard } from '@/components/StatCard';
-import { DesktopLayout } from '@/components/DesktopLayout';
-import { CustomLogo } from '@/components/CustomLogo';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import ContactCard from '@/components/ContactCard';
+import ContactForm from '@/components/ContactForm';
+import StatCard from '@/components/StatCard';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '@/constants/mementoTheme';
-import FirebaseConnectionTest from '@/examples/FirebaseConnectionTest';
-import { useFirebaseContacts } from '@/hooks/useFirebaseContacts';
-import { Contact } from '@/types/contact';
+import useFirebaseContacts from '@/hooks/useFirebaseContacts';
+import type { Contact } from '@/types/contact';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -36,6 +32,10 @@ export default function DashboardScreen() {
         router.push('/(tabs)/export');
         break;
     }
+  };
+
+  const handleViewContactDetail = (contact: Contact) => {
+    router.push(`/contact-detail?contactId=${contact.id}`);
   };
 
   // Sample data for demo purposes
@@ -298,14 +298,15 @@ export default function DashboardScreen() {
           </View>
           
           <View style={styles.contactsGrid}>
-            {mostSeenContacts.map((contact) => (
-              <ContactCard
-                key={contact.id}
-                contact={contact}
-                onPress={() => console.log('Contact pressed:', contact.name)}
-                showEncounterCount={true}
-              />
-            ))}
+             {mostSeenContacts.map((contact) => (
+               <ContactCard
+                 key={contact.id}
+                 contact={contact}
+                 onPress={() => console.log('Contact pressed:', contact.name)}
+                 onViewDetail={handleViewContactDetail}
+                 showEncounterCount={true}
+               />
+             ))}
           </View>
         </View>
 
@@ -429,8 +430,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: MementoColors.primary,
-    paddingHorizontal: MementoSpacing.lg,
-    paddingVertical: MementoSpacing.md,
+    paddingHorizontal: MementoSpacing.md,
+    paddingVertical: MementoSpacing.sm,
     borderRadius: MementoBorderRadius.md,
     shadowColor: MementoColors.primary,
     shadowOffset: { width: 0, height: 2 },

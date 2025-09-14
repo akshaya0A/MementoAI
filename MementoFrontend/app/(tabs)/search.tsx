@@ -1,10 +1,12 @@
 import { ContactCard } from '@/components/ContactCard';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '@/constants/mementoTheme';
+import { DesktopLayout } from '@/components/DesktopLayout';
+import { IconSymbol } from '../../components/ui/icon-symbol';
+import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing, MementoShadows } from '@/constants/mementoTheme';
 import { useFirebaseContacts } from '@/hooks/useFirebaseContacts';
+import { Contact } from '@/types/contact';
+import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 type SortBy = 'name' | 'company' | 'date' | 'encounters';
 type SortOrder = 'asc' | 'desc';
@@ -18,6 +20,8 @@ export default function SearchScreen() {
   const [sortBy, setSortBy] = useState<SortBy>('date');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'contacts' | 'search' | 'export'>('search');
+  const router = useRouter();
 
   // Get unique events and tags for filters
   const allEvents = useMemo(() => {
@@ -103,139 +107,170 @@ export default function SearchScreen() {
 
   const hasActiveFilters = searchQuery !== '' || selectedEvent !== 'all' || selectedTag !== 'all';
 
+  const handlePageChange = (page: string) => {
+    setCurrentPage(page as any);
+    switch (page) {
+      case 'dashboard': router.push('/(tabs)/'); break;
+      case 'contacts': router.push('/(tabs)/contacts'); break;
+      case 'search': router.push('/(tabs)/search'); break;
+      case 'export': router.push('/(tabs)/export'); break;
+    }
+  };
+
+  const handleViewContactDetail = (contact: Contact) => {
+    router.push(`/contact-detail?contactId=${contact.id}`);
+  };
+
   // Show loading state
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <DesktopLayout
+        currentPage={currentPage}
+        onPageChange={handlePageChange}
+        title="Search & Browse"
+        subtitle="Find and explore your contacts"
+      >
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading contacts...</Text>
         </View>
-      </SafeAreaView>
+      </DesktopLayout>
     );
   }
 
   // Show error state
   if (error) {
     return (
-      <SafeAreaView style={styles.container}>
+      <DesktopLayout
+        currentPage={currentPage}
+        onPageChange={handlePageChange}
+        title="Search & Browse"
+        subtitle="Find and explore your contacts"
+      >
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Error: {error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={() => window.location.reload()}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </DesktopLayout>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <DesktopLayout
+      currentPage={currentPage}
+      onPageChange={handlePageChange}
+      title="Search & Browse"
+      subtitle="Find and explore your contacts"
+    >
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Search & Browse</Text>
-          <Text style={styles.subtitle}>Find and explore your contacts</Text>
-        </View>
-
         {/* Search Bar */}
         <View style={styles.searchCard}>
           <View style={styles.searchContainer}>
-            <IconSymbol name="magnifyingglass" size={20} color={MementoColors.text.secondary} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search by name, company, role, location, fun facts, or notes..."
-              placeholderTextColor={MementoColors.text.muted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
+            <View style={styles.searchInputContainer}>
+              <IconSymbol name="magnifyingglass" size={16} color={MementoColors.text.muted} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search by name, company, role, location, fun facts, or notes..."
+                placeholderTextColor={MementoColors.text.muted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </View>
             <TouchableOpacity style={styles.voiceButton}>
-              <IconSymbol name="mic" size={16} color={MementoColors.primary} />
+              <IconSymbol name="mic" size={16} color={MementoColors.text.primary} />
+              <Text style={styles.voiceButtonText}>Voice</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Filters and Controls */}
-        <View style={styles.controlsContainer}>
-          <View style={styles.filtersHeader}>
-            <IconSymbol name="slider.horizontal.3" size={16} color={MementoColors.text.secondary} />
-            <Text style={styles.filtersText}>Filters:</Text>
-          </View>
-          
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll}>
-            {/* Event Filter */}
-            <View style={styles.filterGroup}>
-              <TouchableOpacity
-                style={[styles.filterButton, selectedEvent === 'all' && styles.filterButtonActive]}
-                onPress={() => setSelectedEvent('all')}
-              >
-                <Text style={[styles.filterButtonText, selectedEvent === 'all' && styles.filterButtonTextActive]}>
-                  All Events
-                </Text>
-              </TouchableOpacity>
-              {allEvents.map(event => (
-                <TouchableOpacity
-                  key={event}
-                  style={[styles.filterButton, selectedEvent === event && styles.filterButtonActive]}
-                  onPress={() => setSelectedEvent(event)}
-                >
-                  <Text style={[styles.filterButtonText, selectedEvent === event && styles.filterButtonTextActive]}>
-                    {event}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+        <View style={styles.filtersAndControls}>
+          {/* Filters */}
+          <View style={styles.filtersSection}>
+            <View style={styles.filtersHeader}>
+              <IconSymbol name="slider.horizontal.3" size={16} color={MementoColors.text.muted} />
+              <Text style={styles.filtersText}>Filters:</Text>
             </View>
             
-            {/* Tag Filter */}
-            <View style={styles.filterGroup}>
-              <TouchableOpacity
-                style={[styles.filterButton, selectedTag === 'all' && styles.filterButtonActive]}
-                onPress={() => setSelectedTag('all')}
-              >
-                <Text style={[styles.filterButtonText, selectedTag === 'all' && styles.filterButtonTextActive]}>
-                  All Tags
-                </Text>
-              </TouchableOpacity>
-              {allTags.map(tag => (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll}>
+              {/* Event Filter */}
+              <View style={styles.filterGroup}>
                 <TouchableOpacity
-                  key={tag}
-                  style={[styles.filterButton, selectedTag === tag && styles.filterButtonActive]}
-                  onPress={() => setSelectedTag(tag)}
+                  style={[styles.filterButton, selectedEvent === 'all' && styles.filterButtonActive]}
+                  onPress={() => setSelectedEvent('all')}
                 >
-                  <Text style={[styles.filterButtonText, selectedTag === tag && styles.filterButtonTextActive]}>
-                    {tag}
+                  <IconSymbol name="calendar" size={12} color={selectedEvent === 'all' ? MementoColors.text.white : MementoColors.text.secondary} />
+                  <Text style={[styles.filterButtonText, selectedEvent === 'all' && styles.filterButtonTextActive]}>
+                    All Events
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
+                {allEvents.map(event => (
+                  <TouchableOpacity
+                    key={event}
+                    style={[styles.filterButton, selectedEvent === event && styles.filterButtonActive]}
+                    onPress={() => setSelectedEvent(event)}
+                  >
+                    <IconSymbol name="calendar" size={12} color={selectedEvent === event ? MementoColors.text.white : MementoColors.text.secondary} />
+                    <Text style={[styles.filterButtonText, selectedEvent === event && styles.filterButtonTextActive]}>
+                      {event}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              
+              {/* Tag Filter */}
+              <View style={styles.filterGroup}>
+                <TouchableOpacity
+                  style={[styles.filterButton, selectedTag === 'all' && styles.filterButtonActive]}
+                  onPress={() => setSelectedTag('all')}
+                >
+                  <IconSymbol name="tag" size={12} color={selectedTag === 'all' ? MementoColors.text.white : MementoColors.text.secondary} />
+                  <Text style={[styles.filterButtonText, selectedTag === 'all' && styles.filterButtonTextActive]}>
+                    All Tags
+                  </Text>
+                </TouchableOpacity>
+                {allTags.map(tag => (
+                  <TouchableOpacity
+                    key={tag}
+                    style={[styles.filterButton, selectedTag === tag && styles.filterButtonActive]}
+                    onPress={() => setSelectedTag(tag)}
+                  >
+                    <IconSymbol name="tag" size={12} color={selectedTag === tag ? MementoColors.text.white : MementoColors.text.secondary} />
+                    <Text style={[styles.filterButtonText, selectedTag === tag && styles.filterButtonTextActive]}>
+                      {tag}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
 
-          {hasActiveFilters && (
-            <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
-              <IconSymbol name="xmark" size={12} color="white" />
-              <Text style={styles.clearButtonText}>Clear</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+            {hasActiveFilters && (
+              <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
+                <IconSymbol name="xmark" size={12} color={MementoColors.text.white} />
+                <Text style={styles.clearButtonText}>Clear</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-        {/* Sort and View Controls */}
-        <View style={styles.controlsRow}>
-          <View style={styles.sortControls}>
+          {/* Sort and View Controls */}
+          <View style={styles.controlsRow}>
             <TouchableOpacity 
               style={styles.sortButton}
               onPress={() => {
-                const sortOptions: SortBy[] = ['date', 'name', 'company', 'encounters'];
+                const sortOptions: SortBy[] = ['date', 'name', 'company'];
                 const currentIndex = sortOptions.indexOf(sortBy);
                 const nextIndex = (currentIndex + 1) % sortOptions.length;
                 setSortBy(sortOptions[nextIndex]);
               }}
             >
-              <IconSymbol name="arrow.up.arrow.down" size={16} color={MementoColors.text.secondary} />
               <Text style={styles.sortButtonText}>
-                Sort: {sortBy.charAt(0).toUpperCase() + sortBy.slice(1)}
+                {sortBy.charAt(0).toUpperCase() + sortBy.slice(1)}
               </Text>
+              <IconSymbol name="arrow.up.arrow.down" size={16} color={MementoColors.text.secondary} />
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.sortOrderButton}
               onPress={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
             >
@@ -244,25 +279,25 @@ export default function SearchScreen() {
                 size={16} 
                 color={MementoColors.text.secondary} 
               />
-              <Text style={styles.sortOrderText}>{sortOrder.toUpperCase()}</Text>
             </TouchableOpacity>
-          </View>
 
-          <View style={styles.viewToggle}>
-            <TouchableOpacity
-              style={[styles.viewButton, viewMode === 'list' && styles.viewButtonActive]}
-              onPress={() => setViewMode('list')}
-            >
-              <IconSymbol name="list.bullet" size={16} color={MementoColors.text.secondary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.viewButton, viewMode === 'grid' && styles.viewButtonActive]}
-              onPress={() => setViewMode('grid')}
-            >
-              <IconSymbol name="square.grid.2x2" size={16} color={MementoColors.text.secondary} />
-            </TouchableOpacity>
+            <View style={styles.viewToggle}>
+              <TouchableOpacity
+                style={[styles.viewButton, viewMode === 'grid' && styles.viewButtonActive]}
+                onPress={() => setViewMode('grid')}
+              >
+                <IconSymbol name="square.grid.2x2" size={16} color={MementoColors.text.secondary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.viewButton, viewMode === 'list' && styles.viewButtonActive]}
+                onPress={() => setViewMode('list')}
+              >
+                <IconSymbol name="list.bullet" size={16} color={MementoColors.text.secondary} />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
+
 
         {/* Active Filters Display */}
         {hasActiveFilters && (
@@ -330,14 +365,15 @@ export default function SearchScreen() {
                 <ContactCard
                   key={contact.id}
                   contact={contact}
-                  onPress={() => console.log('Contact pressed:', contact.name)}
+                  onPress={() => handleViewContactDetail(contact)}
+                  onViewDetail={handleViewContactDetail}
                 />
               ))}
             </View>
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </DesktopLayout>
   );
 }
 
@@ -399,37 +435,51 @@ const styles = StyleSheet.create({
     color: MementoColors.textSecondary,
   },
   searchCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    backgroundColor: MementoColors.backgroundCard,
+    borderRadius: MementoBorderRadius.lg,
+    padding: MementoSpacing.lg,
+    marginBottom: MementoSpacing.lg,
+    borderWidth: 1,
+    borderColor: MementoColors.border.medium,
+    ...MementoShadows.sm,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: MementoSpacing.sm,
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: MementoColors.backgroundSecondary,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    marginBottom: 12,
+    borderRadius: MementoBorderRadius.md,
+    paddingHorizontal: MementoSpacing.md,
+    paddingVertical: MementoSpacing.sm,
+    borderWidth: 1,
+    borderColor: MementoColors.border.medium,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 12,
     fontSize: MementoFontSizes.md,
-    color: MementoColors.textPrimary,
+    color: MementoColors.text.primary,
+    marginLeft: MementoSpacing.sm,
   },
   voiceButton: {
-    padding: 8,
-    borderRadius: 6,
-    backgroundColor: MementoColors.tagBackground,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: MementoSpacing.md,
+    paddingVertical: MementoSpacing.sm,
+    borderRadius: MementoBorderRadius.md,
+    backgroundColor: MementoColors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: MementoColors.border.medium,
+    gap: MementoSpacing.xs,
+  },
+  voiceButtonText: {
+    fontSize: MementoFontSizes.sm,
+    color: MementoColors.text.primary,
+    fontWeight: '500',
   },
   voicePrompt: {
     flexDirection: 'row',
@@ -439,6 +489,12 @@ const styles = StyleSheet.create({
   voiceText: {
     fontSize: MementoFontSizes.sm,
     color: MementoColors.textSecondary,
+  },
+  filtersAndControls: {
+    marginBottom: MementoSpacing.lg,
+  },
+  filtersSection: {
+    marginBottom: MementoSpacing.md,
   },
   controlsContainer: {
     marginBottom: 16,
@@ -462,12 +518,15 @@ const styles = StyleSheet.create({
     paddingRight: 16,
   },
   filterButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: 'white',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: MementoSpacing.md,
+    paddingVertical: MementoSpacing.sm,
+    borderRadius: MementoBorderRadius.md,
+    backgroundColor: MementoColors.backgroundCard,
     borderWidth: 1,
-    borderColor: MementoColors.border.light,
+    borderColor: MementoColors.border.medium,
+    gap: MementoSpacing.xs,
   },
   filterButtonActive: {
     backgroundColor: MementoColors.primary,
@@ -475,10 +534,11 @@ const styles = StyleSheet.create({
   },
   filterButtonText: {
     fontSize: MementoFontSizes.sm,
-    color: MementoColors.textPrimary,
+    color: MementoColors.text.primary,
+    fontWeight: '500',
   },
   filterButtonTextActive: {
-    color: 'white',
+    color: MementoColors.text.white,
   },
   clearButton: {
     flexDirection: 'row',
@@ -507,46 +567,44 @@ const styles = StyleSheet.create({
   sortButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-    backgroundColor: 'white',
+    paddingHorizontal: MementoSpacing.md,
+    paddingVertical: MementoSpacing.sm,
+    borderRadius: MementoBorderRadius.md,
+    backgroundColor: MementoColors.backgroundCard,
     borderWidth: 1,
-    borderColor: MementoColors.border.light,
-    gap: 4,
+    borderColor: MementoColors.border.medium,
+    gap: MementoSpacing.xs,
   },
   sortButtonText: {
     fontSize: MementoFontSizes.sm,
-    color: MementoColors.textPrimary,
+    color: MementoColors.text.primary,
+    fontWeight: '500',
   },
   sortOrderButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderRadius: 6,
-    backgroundColor: 'white',
+    padding: MementoSpacing.sm,
+    borderRadius: MementoBorderRadius.md,
+    backgroundColor: MementoColors.backgroundCard,
     borderWidth: 1,
-    borderColor: MementoColors.border.light,
-    gap: 2,
+    borderColor: MementoColors.border.medium,
   },
   sortOrderText: {
     fontSize: MementoFontSizes.sm,
-    color: MementoColors.textPrimary,
+    color: MementoColors.text.primary,
   },
   viewToggle: {
     flexDirection: 'row',
-    backgroundColor: 'white',
-    borderRadius: 6,
+    backgroundColor: MementoColors.backgroundCard,
+    borderRadius: MementoBorderRadius.md,
     borderWidth: 1,
-    borderColor: MementoColors.border.light,
+    borderColor: MementoColors.border.medium,
+    overflow: 'hidden',
   },
   viewButton: {
-    padding: 8,
-    borderRadius: 6,
+    padding: MementoSpacing.sm,
+    backgroundColor: MementoColors.backgroundCard,
   },
   viewButtonActive: {
-    backgroundColor: MementoColors.secondary,
+    backgroundColor: MementoColors.backgroundSecondary,
   },
   viewButtonText: {
     fontSize: MementoFontSizes.md,
@@ -561,15 +619,18 @@ const styles = StyleSheet.create({
   activeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: MementoColors.tagBackground,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
+    backgroundColor: MementoColors.backgroundSecondary,
+    paddingHorizontal: MementoSpacing.sm,
+    paddingVertical: MementoSpacing.xs,
+    borderRadius: MementoBorderRadius.sm,
+    borderWidth: 1,
+    borderColor: MementoColors.border.medium,
+    gap: MementoSpacing.xs,
   },
   activeBadgeText: {
     fontSize: MementoFontSizes.sm,
-    color: MementoColors.textPrimary,
+    color: MementoColors.text.primary,
+    fontWeight: '500',
   },
   badgeRemove: {
     padding: 2,
@@ -589,42 +650,38 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   noResults: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 32,
+    backgroundColor: MementoColors.backgroundCard,
+    borderRadius: MementoBorderRadius.lg,
+    padding: MementoSpacing.xxl,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    borderWidth: 1,
+    borderColor: MementoColors.border.medium,
+    ...MementoShadows.sm,
   },
   noResultsTitle: {
     fontSize: MementoFontSizes.lg,
     fontWeight: '600',
-    color: MementoColors.textPrimary,
-    marginTop: 12,
-    marginBottom: 8,
+    color: MementoColors.text.primary,
+    marginTop: MementoSpacing.md,
+    marginBottom: MementoSpacing.sm,
   },
   noResultsText: {
     fontSize: MementoFontSizes.sm,
-    color: MementoColors.textSecondary,
+    color: MementoColors.text.secondary,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: MementoSpacing.lg,
   },
   clearFiltersButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-    backgroundColor: 'white',
+    paddingHorizontal: MementoSpacing.lg,
+    paddingVertical: MementoSpacing.sm,
+    borderRadius: MementoBorderRadius.md,
+    backgroundColor: MementoColors.backgroundSecondary,
     borderWidth: 1,
-    borderColor: MementoColors.border.light,
+    borderColor: MementoColors.border.medium,
   },
   clearFiltersButtonText: {
     fontSize: MementoFontSizes.sm,
-    color: MementoColors.textPrimary,
+    color: MementoColors.text.primary,
+    fontWeight: '500',
   },
 });

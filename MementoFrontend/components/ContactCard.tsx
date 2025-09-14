@@ -2,13 +2,14 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Contact } from '@/types/contact';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing, MementoShadows } from '@/constants/mementoTheme';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { IconSymbol } from './ui/icon-symbol';
 
 interface ContactCardProps {
   contact: Contact;
   onPress?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onViewDetail?: (contact: Contact) => void;
   showEncounterCount?: boolean;
   showRecentEncounter?: boolean;
 }
@@ -18,6 +19,7 @@ export function ContactCard({
   onPress, 
   onEdit, 
   onDelete, 
+  onViewDetail,
   showEncounterCount = false,
   showRecentEncounter = false 
 }: ContactCardProps) {
@@ -25,99 +27,138 @@ export function ContactCard({
     ? contact.encounters.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
     : null;
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
+  const latestNote = contact.notes.length > 0 
+    ? contact.notes[contact.notes.length - 1]
+    : null;
+
+  const isRecentlyMet = latestEncounter && 
+    (typeof latestEncounter.date === 'string' ? new Date(latestEncounter.date) : latestEncounter.date).getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000; // Within last 7 days
+
+  const formatDate = (date: string | Date) => {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return dateObj.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric',
-      year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+      year: dateObj.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
     });
   };
 
+  // Generate initials for avatar
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  };
+
+  // Generate tags based on contact data
+  const generateTags = () => {
+    const tags = [];
+    if (contact.company.includes('Tech')) tags.push('Engineering');
+    if (contact.role.includes('Engineer')) tags.push('React');
+    if (contact.role.includes('Product')) tags.push('Product');
+    if (contact.role.includes('Design')) tags.push('Design');
+    if (contact.role.includes('Talent')) tags.push('HR');
+    return tags;
+  };
+
+  const tags = generateTags();
+
+  const handlePress = () => {
+    if (onViewDetail) {
+      onViewDetail(contact);
+    } else if (onPress) {
+      onPress();
+    }
+  };
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress}>
-      <View style={styles.cardHeader}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {contact.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-          </Text>
+    <TouchableOpacity style={styles.card} onPress={handlePress}>
+      {/* Status Badges */}
+      {isRecentlyMet && showRecentEncounter && (
+        <View style={styles.recentBadge}>
+          <IconSymbol name="clock" size={12} color={MementoColors.warning} />
+          <Text style={styles.badgeText}>Seen Recently</Text>
         </View>
-        <View style={styles.cardActions}>
+      )}
+      
+      {showEncounterCount && contact.encounters.length > 1 && (
+        <View style={styles.encounterBadge}>
+          <Text style={styles.badgeText}>{contact.encounters.length} encounters</Text>
+        </View>
+      )}
+
+      <View style={styles.cardContent}>
+        <View style={styles.mainContent}>
+          {/* Avatar */}
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{getInitials(contact.name)}</Text>
+          </View>
+          
+          {/* Contact Info */}
+          <View style={styles.contactInfo}>
+            <Text style={styles.name} numberOfLines={1}>{contact.name}</Text>
+            <Text style={styles.companyRole} numberOfLines={1}>
+              {contact.role} at {contact.company}
+            </Text>
+            
+            {/* Encounter Details */}
+            {latestEncounter && (
+              <View style={styles.encounterDetails}>
+                <View style={styles.encounterRow}>
+                  <IconSymbol name="calendar.badge.clock" size={12} color={MementoColors.text.muted} />
+                  <Text style={styles.encounterText}>
+                    {formatDate(latestEncounter.date)}
+                  </Text>
+                </View>
+                <View style={styles.encounterRow}>
+                  <IconSymbol name="safari" size={12} color={MementoColors.text.muted} />
+                  <Text style={styles.encounterText} numberOfLines={1}>
+                    {latestEncounter.location || latestEncounter.notes}
+                  </Text>
+                </View>
+              </View>
+            )}
+            
+            {/* Where Met Info */}
+            <Text style={styles.whereMetText} numberOfLines={1}>
+              Met at: {contact.whereMet} • From: {contact.whereFrom}
+            </Text>
+            
+            {/* Latest Note */}
+            {latestNote && (
+              <Text style={styles.noteText} numberOfLines={2}>
+                {latestNote.content}
+              </Text>
+            )}
+            
+            {/* Tags */}
+            {tags.length > 0 && (
+              <View style={styles.tagsContainer}>
+                {tags.slice(0, 2).map((tag, index) => (
+                  <View key={index} style={[styles.tag, { backgroundColor: MementoColors.backgroundSecondary, borderColor: MementoColors.border.medium }]}>
+                    <Text style={[styles.tagText, { color: MementoColors.text.primary }]}>{tag}</Text>
+                  </View>
+                ))}
+                {tags.length > 2 && (
+                  <View style={[styles.tag, { backgroundColor: MementoColors.backgroundSecondary, borderColor: MementoColors.border.medium }]}>
+                    <Text style={[styles.tagText, { color: MementoColors.text.muted }]}>+{tags.length - 2}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actions}>
           {onEdit && (
-            <TouchableOpacity style={styles.actionButton} onPress={onEdit}>
-              <IconSymbol name="pencil" size={14} color={MementoColors.text.secondary} />
+            <TouchableOpacity onPress={onEdit} style={styles.actionButton}>
+              <IconSymbol name="pencil" size={16} color={MementoColors.text.secondary} />
             </TouchableOpacity>
           )}
           {onDelete && (
-            <TouchableOpacity style={styles.actionButton} onPress={onDelete}>
-              <IconSymbol name="trash" size={14} color={MementoColors.error} />
+            <TouchableOpacity onPress={onDelete} style={styles.actionButton}>
+              <IconSymbol name="trash" size={16} color={MementoColors.error} />
             </TouchableOpacity>
           )}
-        </View>
-      </View>
-      
-      <View style={styles.cardContent}>
-        <Text style={styles.name} numberOfLines={1}>{contact.name}</Text>
-        <Text style={styles.company} numberOfLines={1}>{contact.company}</Text>
-        <Text style={styles.role} numberOfLines={1}>{contact.role}</Text>
-        
-        {showEncounterCount && (
-          <View style={styles.encounterInfo}>
-            <IconSymbol name="handshake" size={12} color={MementoColors.text.secondary} />
-            <Text style={styles.encounterText}>
-              {contact.encounters.length} encounter{contact.encounters.length !== 1 ? 's' : ''}
-            </Text>
-          </View>
-        )}
-        
-        {showRecentEncounter && latestEncounter && (
-          <View style={styles.recentInfo}>
-            <IconSymbol name="clock" size={12} color={MementoColors.text.secondary} />
-            <Text style={styles.recentText}>
-              Last seen {formatDate(latestEncounter.date)}
-            </Text>
-          </View>
-        )}
-        
-        {contact.funFacts.length > 0 && (
-          <View style={styles.funFacts}>
-            <Text style={styles.funFactText} numberOfLines={2}>
-              {contact.funFacts[0]}
-            </Text>
-          </View>
-        )}
-        
-        {/* Tags */}
-        <View style={styles.tagsContainer}>
-          {contact.company.includes('Tech') && (
-            <View style={[styles.tag, { backgroundColor: MementoColors.tags.engineering + '20' }]}>
-              <Text style={[styles.tagText, { color: MementoColors.tags.engineering }]}>Engineering</Text>
-            </View>
-          )}
-          {contact.role.includes('Engineer') && (
-            <View style={[styles.tag, { backgroundColor: MementoColors.tags.react + '20' }]}>
-              <Text style={[styles.tagText, { color: MementoColors.tags.react }]}>React</Text>
-            </View>
-          )}
-          {contact.role.includes('Product') && (
-            <View style={[styles.tag, { backgroundColor: MementoColors.tags.product + '20' }]}>
-              <Text style={[styles.tagText, { color: MementoColors.tags.product }]}>Product</Text>
-            </View>
-          )}
-          {contact.role.includes('Design') && (
-            <View style={[styles.tag, { backgroundColor: MementoColors.tags.design + '20' }]}>
-              <Text style={[styles.tagText, { color: MementoColors.tags.design }]}>Design</Text>
-            </View>
-          )}
-          {contact.role.includes('Talent') && (
-            <View style={[styles.tag, { backgroundColor: MementoColors.tags.hr + '20' }]}>
-              <Text style={[styles.tagText, { color: MementoColors.tags.hr }]}>HR</Text>
-            </View>
-          )}
-          <View style={[styles.tag, { backgroundColor: MementoColors.text.muted + '20' }]}>
-            <Text style={[styles.tagText, { color: MementoColors.text.muted }]}>+1</Text>
-          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -131,98 +172,131 @@ const styles = StyleSheet.create({
     padding: MementoSpacing.lg,
     marginBottom: MementoSpacing.md,
     borderWidth: 1,
-    borderColor: MementoColors.border.light,
+    borderColor: MementoColors.border.medium,
     ...MementoShadows.sm,
-    minHeight: 140,
+    minHeight: 160,
+    position: 'relative',
   },
-  cardHeader: {
+  recentBadge: {
+    position: 'absolute',
+    top: MementoSpacing.sm,
+    right: MementoSpacing.sm,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: MementoSpacing.sm,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: MementoColors.primary,
-    justifyContent: 'center',
     alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: MementoFontSizes.sm,
-    fontWeight: 'bold',
-    color: MementoColors.text.white,
-  },
-  cardActions: {
-    flexDirection: 'row',
-    gap: MementoSpacing.xs,
-  },
-  actionButton: {
-    padding: MementoSpacing.xs,
+    backgroundColor: MementoColors.warning + '20',
+    paddingHorizontal: MementoSpacing.sm,
+    paddingVertical: 4,
     borderRadius: MementoBorderRadius.sm,
-    backgroundColor: MementoColors.backgroundSecondary,
+    zIndex: 1,
+  },
+  encounterBadge: {
+    position: 'absolute',
+    top: MementoSpacing.sm,
+    right: MementoSpacing.sm,
+    backgroundColor: MementoColors.primary + '20',
+    paddingHorizontal: MementoSpacing.sm,
+    paddingVertical: 4,
+    borderRadius: MementoBorderRadius.sm,
+    zIndex: 1,
+  },
+  badgeText: {
+    fontSize: MementoFontSizes.xs,
+    fontWeight: '600',
+    color: MementoColors.warning,
+    marginLeft: 4,
   },
   cardContent: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  mainContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: MementoColors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: MementoSpacing.md,
+    borderWidth: 1,
+    borderColor: MementoColors.border.medium,
+  },
+  avatarText: {
+    fontSize: MementoFontSizes.md,
+    fontWeight: 'bold',
+    color: MementoColors.text.white,
+  },
+  contactInfo: {
+    flex: 1,
+    minWidth: 0,
   },
   name: {
-    fontSize: MementoFontSizes.md,
+    fontSize: MementoFontSizes.lg,
     fontWeight: '600',
     color: MementoColors.text.primary,
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  company: {
+  companyRole: {
     fontSize: MementoFontSizes.sm,
     color: MementoColors.text.secondary,
-    marginBottom: 2,
+    marginBottom: MementoSpacing.sm,
   },
-  role: {
-    fontSize: MementoFontSizes.sm,
-    color: MementoColors.text.muted,
+  encounterDetails: {
     marginBottom: MementoSpacing.xs,
   },
-  encounterInfo: {
+  encounterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: MementoSpacing.xs,
+    marginBottom: 2,
   },
   encounterText: {
     fontSize: MementoFontSizes.xs,
-    color: MementoColors.text.secondary,
+    color: MementoColors.text.muted,
     marginLeft: 4,
+    flex: 1,
   },
-  recentInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: MementoSpacing.xs,
-  },
-  recentText: {
-    fontSize: MementoFontSizes.xs,
-    color: MementoColors.text.secondary,
-    marginLeft: 4,
-  },
-  funFacts: {
-    marginTop: MementoSpacing.xs,
-  },
-  funFactText: {
+  whereMetText: {
     fontSize: MementoFontSizes.xs,
     color: MementoColors.text.muted,
-    fontStyle: 'italic',
+    marginBottom: MementoSpacing.xs,
+  },
+  noteText: {
+    fontSize: MementoFontSizes.xs,
+    color: MementoColors.text.muted,
+    marginBottom: MementoSpacing.sm,
+    lineHeight: 16,
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: MementoSpacing.sm,
     gap: MementoSpacing.xs,
   },
   tag: {
     paddingHorizontal: MementoSpacing.sm,
     paddingVertical: 2,
     borderRadius: MementoBorderRadius.sm,
+    borderWidth: 1,
   },
   tagText: {
     fontSize: MementoFontSizes.xs,
     fontWeight: '500',
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: MementoSpacing.sm,
+  },
+  actionButton: {
+    padding: MementoSpacing.sm,
+    borderRadius: MementoBorderRadius.sm,
+    backgroundColor: MementoColors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: MementoColors.border.medium,
+    marginLeft: MementoSpacing.xs,
   },
 });

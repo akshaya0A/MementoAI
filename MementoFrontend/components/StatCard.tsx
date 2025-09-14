@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing, MementoShadows } from '@/constants/mementoTheme';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { IconSymbol } from './ui/icon-symbol';
 
 interface StatCardProps {
   title: string;
@@ -41,7 +41,7 @@ const styles = StyleSheet.create({
     borderRadius: MementoBorderRadius.lg,
     padding: MementoSpacing.lg,
     borderWidth: 1,
-    borderColor: MementoColors.border.light,
+    borderColor: MementoColors.border.medium,
     ...MementoShadows.sm,
   },
   header: {
@@ -56,6 +56,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: MementoColors.border.medium,
   },
   trendContainer: {
     backgroundColor: MementoColors.success + '20',

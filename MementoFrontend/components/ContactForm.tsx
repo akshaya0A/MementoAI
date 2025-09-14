@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Contact } from '@/types/contact';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '@/constants/mementoTheme';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { IconSymbol } from './ui/icon-symbol';
 
 interface ContactFormProps {
   contact?: Contact;
