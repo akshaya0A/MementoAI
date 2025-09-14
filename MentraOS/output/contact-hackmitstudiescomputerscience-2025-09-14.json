@@ -1,0 +1,42 @@
+{
+  "timestamp": "2025-09-14T00:47:27.805Z",
+  "contactInfo": "hackmitstudiescomputerscience@university.ofwisconsin.edu",
+  "skills": [
+    "Python"
+  ],
+  "location": "Subject Two booth",
+  "nextSteps": "Discuss potential internship opportunities for summer 2026",
+  "confidence": 0.7,
+  "summary": "Computer science student seeking internship for summer 2026",
+  "gpsLocation": null,
+  "transcript": {
+    "original": "Can you hear me? Yes. So, I'm at subject two at hackmitstudiescomputerscience@university.ofwisconsin.likes to code in Python. Looking for an internship summer 2026.",
+    "cleaned": "Can you hear me? Yes. I'm at subject two at hackmitstudiescomputerscience@university.ofwisconsin.likes to code in Python. Looking for an internship summer 2026.",
+    "raw": {
+      "fullText": "Can you hear me? Yes. So, I'm at subject two at hackmitstudiescomputerscience@university.ofwisconsin.likes to code in Python. Looking for an internship summer 2026.",
+      "segments": [
+        {
+          "text": "Can you hear me?",
+          "isFinal": true,
+          "segmentIndex": 0,
+          "timestamp": "2025-09-14T00:46:15.161Z"
+        },
+        {
+          "text": "Yes.",
+          "isFinal": true,
+          "segmentIndex": 1,
+          "timestamp": "2025-09-14T00:46:15.161Z"
+        },
+        {
+          "text": "So, I'm at subject two at hackmitstudiescomputerscience@university.ofwisconsin.likes to code in Python. Looking for an internship summer 2026.",
+          "isFinal": true,
+          "segmentIndex": 2,
+          "timestamp": "2025-09-14T00:46:15.161Z"
+        }
+      ],
+      "wordCount": 22,
+      "charCount": 164,
+      "processingTime": 1757810775161
+    }
+  }
+}
