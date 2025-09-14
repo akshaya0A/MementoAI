@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View, ScrollView, Linking, Alert } 
 import { Contact } from '@/types/contact';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing, MementoShadows } from '@/constants/mementoTheme';
 import { IconSymbol } from './ui/icon-symbol';
+import { SocialIcon } from './ui/social-icon';
 import { ContactForm } from './ContactForm';
 
 interface ContactDetailProps {
@@ -50,6 +51,30 @@ END:VCARD`;
   const handleLinkedIn = () => {
     if (contact.linkedinUrl) {
       Linking.openURL(contact.linkedinUrl);
+    }
+  };
+
+  const handleGitHub = () => {
+    if (contact.githubUrl) {
+      Linking.openURL(contact.githubUrl);
+    }
+  };
+
+  const handleTwitter = () => {
+    if (contact.twitterUrl) {
+      Linking.openURL(contact.twitterUrl);
+    }
+  };
+
+  const handleWebsite = () => {
+    if (contact.websiteUrl) {
+      Linking.openURL(contact.websiteUrl);
+    }
+  };
+
+  const handleInstagram = () => {
+    if (contact.instagramUrl) {
+      Linking.openURL(contact.instagramUrl);
     }
   };
 
@@ -110,20 +135,37 @@ END:VCARD`;
               <View style={styles.quickActions}>
                 {contact.phone && (
                   <TouchableOpacity style={styles.actionButton} onPress={handleCall}>
-                    <IconSymbol name="phone" size={16} color={MementoColors.primary} />
-                    <Text style={styles.actionButtonText}>Call</Text>
+                    <SocialIcon platform="phone" size={20} color={MementoColors.text.secondary} />
                   </TouchableOpacity>
                 )}
                 {contact.email && (
                   <TouchableOpacity style={styles.actionButton} onPress={handleEmail}>
-                    <IconSymbol name="mail" size={16} color={MementoColors.primary} />
-                    <Text style={styles.actionButtonText}>Email</Text>
+                    <SocialIcon platform="envelope" size={20} color={MementoColors.text.secondary} />
                   </TouchableOpacity>
                 )}
                 {contact.linkedinUrl && (
                   <TouchableOpacity style={styles.actionButton} onPress={handleLinkedIn}>
-                    <IconSymbol name="linkedin" size={16} color={MementoColors.primary} />
-                    <Text style={styles.actionButtonText}>LinkedIn</Text>
+                    <SocialIcon platform="linkedin" size={20} color={MementoColors.text.secondary} />
+                  </TouchableOpacity>
+                )}
+                {contact.githubUrl && (
+                  <TouchableOpacity style={styles.actionButton} onPress={handleGitHub}>
+                    <SocialIcon platform="github" size={20} color={MementoColors.text.secondary} />
+                  </TouchableOpacity>
+                )}
+                {contact.twitterUrl && (
+                  <TouchableOpacity style={styles.actionButton} onPress={handleTwitter}>
+                    <SocialIcon platform="x" size={20} color={MementoColors.text.secondary} />
+                  </TouchableOpacity>
+                )}
+                {contact.instagramUrl && (
+                  <TouchableOpacity style={styles.actionButton} onPress={handleInstagram}>
+                    <SocialIcon platform="instagram" size={20} color={MementoColors.text.secondary} />
+                  </TouchableOpacity>
+                )}
+                {contact.websiteUrl && (
+                  <TouchableOpacity style={styles.actionButton} onPress={handleWebsite}>
+                    <SocialIcon platform="globe" size={20} color={MementoColors.text.secondary} />
                   </TouchableOpacity>
                 )}
               </View>
@@ -235,8 +277,48 @@ END:VCARD`;
                   </TouchableOpacity>
                 </View>
               )}
+              {contact.githubUrl && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>GitHub</Text>
+                  <TouchableOpacity onPress={handleGitHub}>
+                    <Text style={styles.linkText}>View Profile</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {contact.twitterUrl && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>X (Twitter)</Text>
+                  <TouchableOpacity onPress={handleTwitter}>
+                    <Text style={styles.linkText}>View Profile</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {contact.instagramUrl && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Instagram</Text>
+                  <TouchableOpacity onPress={handleInstagram}>
+                    <Text style={styles.linkText}>View Profile</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {contact.websiteUrl && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoLabel}>Website</Text>
+                  <TouchableOpacity onPress={handleWebsite}>
+                    <Text style={styles.linkText}>Visit Website</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           </View>
+
+          {/* Deep Research Area */}
+          {contact.deepResearchArea && (
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Research & Expertise</Text>
+              <Text style={styles.researchText}>{contact.deepResearchArea}</Text>
+            </View>
+          )}
 
           {/* Fun Facts */}
           <View style={styles.sectionCard}>
@@ -370,7 +452,7 @@ END:VCARD`;
         <ContactForm
           contact={contact}
           onSave={(updatedContact) => {
-            onEdit(updatedContact);
+            onEdit(updatedContact as Contact);
             setIsEditFormOpen(false);
           }}
           onCancel={() => setIsEditFormOpen(false)}
@@ -393,7 +475,7 @@ const styles = StyleSheet.create({
     paddingVertical: MementoSpacing.md,
     backgroundColor: MementoColors.background,
     borderBottomWidth: 1,
-    borderBottomColor: MementoColors.border.light,
+    borderBottomColor: MementoColors.borderLight,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -461,17 +543,21 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: MementoSpacing.md,
     paddingVertical: MementoSpacing.sm,
     borderRadius: MementoBorderRadius.md,
     borderWidth: 1,
-    borderColor: MementoColors.border.medium,
+    borderColor: MementoColors.borderMedium,
     backgroundColor: MementoColors.background,
+    minWidth: 44,
+    minHeight: 44,
   },
   actionButtonText: {
     fontSize: MementoFontSizes.sm,
     color: MementoColors.primary,
     marginLeft: 4,
+    flexShrink: 1,
   },
   exportActions: {
     flexDirection: 'row',
@@ -484,7 +570,7 @@ const styles = StyleSheet.create({
     paddingVertical: MementoSpacing.sm,
     borderRadius: MementoBorderRadius.md,
     borderWidth: 1,
-    borderColor: MementoColors.border.medium,
+    borderColor: MementoColors.borderMedium,
     backgroundColor: MementoColors.background,
   },
   exportButtonText: {
@@ -587,6 +673,11 @@ const styles = StyleSheet.create({
     fontSize: MementoFontSizes.sm,
     color: MementoColors.text.primary,
     flex: 1,
+  },
+  researchText: {
+    fontSize: MementoFontSizes.md,
+    color: MementoColors.text.primary,
+    lineHeight: 22,
   },
   emptyText: {
     fontSize: MementoFontSizes.sm,

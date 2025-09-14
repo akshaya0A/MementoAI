@@ -20,10 +20,10 @@ export default function ExportScreen() {
   const handlePageChange = (page: string) => {
     setCurrentPage(page as any);
     switch (page) {
-      case 'dashboard': router.push('/(tabs)/'); break;
-      case 'contacts': router.push('/(tabs)/contacts'); break;
-      case 'search': router.push('/(tabs)/search'); break;
-      case 'export': router.push('/(tabs)/export'); break;
+      case 'dashboard': router.push('/'); break;
+      case 'contacts': router.push('/contacts'); break;
+      case 'search': router.push('/search'); break;
+      case 'export': router.push('/export'); break;
     }
   };
 
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
     backgroundColor: MementoColors.backgroundCard,
     borderRadius: MementoBorderRadius.lg,
     borderWidth: 1,
-    borderColor: MementoColors.border.medium,
+    borderColor: MementoColors.border,
     ...MementoShadows.sm,
   },
   cardTitle: {
@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
     padding: MementoSpacing.lg,
     paddingBottom: MementoSpacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: MementoColors.border.light,
+    borderBottomColor: MementoColors.border,
   },
   settingsContent: {
     padding: MementoSpacing.lg,
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: MementoFontSizes.md,
-    color: MementoColors.text.error,
+    color: MementoColors.error, // Fixed: use top-level error color
     textAlign: 'center',
     marginBottom: MementoSpacing.md,
   },

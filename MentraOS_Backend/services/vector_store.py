@@ -109,11 +109,6 @@ def write_embedding_doc(
     db.document(path).set(doc, merge=True)
     return path
 
-# services/nearest_neighbor.py
-from typing import Dict, List, Optional
-from google.cloud import firestore
-from .vector_store import init_vertex, _build_restricts
-
 def find_neighbors(
     query_vector: List[float],
     num_neighbors: int = 10,
@@ -126,7 +121,7 @@ def find_neighbors(
     """
     try:
         index_ep, deployed_id = init_vertex()
-        rs = _build_restricts(filters or {})
+        rs = _restricts(filters or {})
         if uid:
             rs.append({"namespace": "uid", "allow_list": [str(uid)]})
 

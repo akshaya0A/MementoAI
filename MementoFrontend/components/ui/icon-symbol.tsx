@@ -36,6 +36,14 @@ const iconMap: { [key: string]: string } = {
   'square.grid.2x2': '⊞',
   'xmark.circle.fill': '❌',
   'safari': '🧭',
+  'github': '⚡',
+  'linkedin': '💼',
+  'twitter': '🐦',
+  'x': '🐦',
+  'globe': '🌐',
+  'link': '🔗',
+  'phone': '📞',
+  'envelope': '📧',
 };
 
 export function IconSymbol({ name, size = 24, color = '#000' }: IconSymbolProps) {

@@ -926,20 +926,10 @@ async function getContinuousLocation(session: AppSession): Promise<any> {
 }
 */
 
-// Function to get placeholder location (Boston, MIT)
+// Function to get placeholder location (disabled)
 async function getPlaceholderLocation(): Promise<any> {
-  console.log('📍 Using placeholder location: Boston, MIT');
-  
-  const locationData = {
-    latitude: 42.3601,
-    longitude: -71.0942,
-    accuracy: 'placeholder',
-    timestamp: new Date().toISOString(),
-    locationName: 'MIT Campus, Cambridge, MA'
-  };
-  
-  console.log(`📍 Placeholder location: ${locationData.latitude}, ${locationData.longitude} - ${locationData.locationName}`);
-  return locationData;
+  console.log('📍 Location services disabled - no backend connection');
+  return null;
 }
 
 // Function to send JSON data to backend API

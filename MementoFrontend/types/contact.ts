@@ -10,6 +10,7 @@ export interface Contact {
   twitterUrl?: string;
   instagramUrl?: string;
   websiteUrl?: string;
+  deepResearchArea?: string; // Deep research area for description
   socialMedia: {
     platform: string;
     url: string;

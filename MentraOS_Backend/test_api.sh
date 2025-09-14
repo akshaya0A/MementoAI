@@ -23,16 +23,9 @@ echo ""
 echo "== Health =="
 curl -s "$BASE_URL/health" -H "Content-Type: text/plain" "${AUTH_HDR[@]}"; echo; echo
 
-# ----- Make a dummy 128-dim vector -----
-VEC="$(python3 -c "
-import random; random.seed(42)
-print('[' + ','.join(str(round(random.uniform(-1,1),6)) for _ in range(128)) + ']')
-")"
-echo "Vector len = $(python3 -c "
-import json
-vec = $VEC
-print(len(vec))
-")"
+# ----- Make a dummy 128-dim vector (disabled) -----
+VEC="[]"
+echo "Vector generation disabled - no backend connection"
 
 # ----- 1) Identify-only (should be unknown on first run) -----
 echo "== Identify (expect unknown first) =="

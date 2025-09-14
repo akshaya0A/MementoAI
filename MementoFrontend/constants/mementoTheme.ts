@@ -42,13 +42,7 @@ export const MementoColors = {
     muted: '#6B7280', // Medium grey
     white: '#FFFFFF' // White
   },
-  
-  border: {
-    light: '#F3F4F6', // Very light border
-    medium: '#D1D5DB', // Medium border
-    dark: '#6B7280' // Dark grey border
-  },
-  
+
   // Stats colors - Black and white palette
   stats: {
     contacts: '#000000', // Pure black
@@ -68,7 +62,7 @@ export const MementoColors = {
     hr: '#6B7280', // Medium grey
     dataScience: '#000000', // Pure black
     design: '#374151', // Dark grey
-    ux: '#6B7280' // Medium grey
+    ux: '#6B7280', // Medium grey
   }
 };
 

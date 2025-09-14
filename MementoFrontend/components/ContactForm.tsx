@@ -8,7 +8,7 @@ import {
   ScrollView, 
   Alert 
 } from 'react-native';
-import { Contact } from '@/types/contact';
+import { Contact, Note, Encounter } from '@/types/contact';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '@/constants/mementoTheme';
 import { IconSymbol } from './ui/icon-symbol';
 
@@ -25,9 +25,21 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
     role: '',
     whereFrom: '',
     whereMet: '',
+    email: '',
+    phone: '',
+    linkedinUrl: '',
+    githubUrl: '',
+    twitterUrl: '',
+    instagramUrl: '',
+    websiteUrl: '',
+    deepResearchArea: '',
     funFacts: [] as string[],
-    notes: [] as string[],
-    encounters: [] as any[],
+    notes: [] as Note[],
+    encounters: [] as Encounter[],
+    socialMedia: [] as any[],
+    tags: [] as string[],
+    createdAt: new Date(),
+    updatedAt: new Date(),
   });
 
   const [newFunFact, setNewFunFact] = useState('');
@@ -41,9 +53,21 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
         role: contact.role,
         whereFrom: contact.whereFrom,
         whereMet: contact.whereMet,
+        email: contact.email || '',
+        phone: contact.phone || '',
+        linkedinUrl: contact.linkedinUrl || '',
+        githubUrl: contact.githubUrl || '',
+        twitterUrl: contact.twitterUrl || '',
+        instagramUrl: contact.instagramUrl || '',
+        websiteUrl: contact.websiteUrl || '',
+        deepResearchArea: contact.deepResearchArea || '',
         funFacts: [...contact.funFacts],
         notes: [...contact.notes],
         encounters: [...contact.encounters],
+        socialMedia: [...contact.socialMedia],
+        tags: [...contact.tags],
+        createdAt: contact.createdAt,
+        updatedAt: contact.updatedAt,
       });
     }
   }, [contact]);
@@ -76,9 +100,15 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
 
   const addNote = () => {
     if (newNote.trim()) {
+      const note: Note = {
+        id: Date.now().toString(),
+        content: newNote.trim(),
+        timestamp: new Date(),
+        isVoiceNote: false
+      };
       setFormData(prev => ({
         ...prev,
-        notes: [...prev.notes, newNote.trim()]
+        notes: [...prev.notes, note]
       }));
       setNewNote('');
     }
@@ -164,6 +194,125 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
             </View>
           </View>
 
+          {/* Contact Information */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Contact Information</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.email}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
+                placeholder="Enter email address"
+                placeholderTextColor={MementoColors.text.muted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Phone</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.phone}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
+                placeholder="Enter phone number"
+                placeholderTextColor={MementoColors.text.muted}
+                keyboardType="phone-pad"
+              />
+            </View>
+          </View>
+
+          {/* Social Media & Links */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Social Media & Links</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>LinkedIn URL</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.linkedinUrl}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, linkedinUrl: text }))}
+                placeholder="https://linkedin.com/in/username"
+                placeholderTextColor={MementoColors.text.muted}
+                keyboardType="url"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>GitHub URL</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.githubUrl}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, githubUrl: text }))}
+                placeholder="https://github.com/username"
+                placeholderTextColor={MementoColors.text.muted}
+                keyboardType="url"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>X (Twitter) URL</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.twitterUrl}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, twitterUrl: text }))}
+                placeholder="https://x.com/username"
+                placeholderTextColor={MementoColors.text.muted}
+                keyboardType="url"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Instagram URL</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.instagramUrl}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, instagramUrl: text }))}
+                placeholder="https://instagram.com/username"
+                placeholderTextColor={MementoColors.text.muted}
+                keyboardType="url"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Website URL</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.websiteUrl}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, websiteUrl: text }))}
+                placeholder="https://personal-website.com"
+                placeholderTextColor={MementoColors.text.muted}
+                keyboardType="url"
+                autoCapitalize="none"
+              />
+            </View>
+          </View>
+
+          {/* Research & Description */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Research & Description</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Deep Research Area</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={formData.deepResearchArea}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, deepResearchArea: text }))}
+                placeholder="Describe their area of expertise, research interests, or professional focus"
+                placeholderTextColor={MementoColors.text.muted}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+            </View>
+          </View>
+
           {/* Fun Facts */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Fun Facts</Text>
@@ -209,8 +358,8 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
             </View>
 
             {formData.notes.map((note, index) => (
-              <View key={index} style={styles.listItem}>
-                <Text style={styles.listItemText}>{note}</Text>
+              <View key={note.id} style={styles.listItem}>
+                <Text style={styles.listItemText}>{note.content}</Text>
                 <TouchableOpacity onPress={() => removeNote(index)}>
                   <IconSymbol name="trash" size={14} color={MementoColors.error} />
                 </TouchableOpacity>
@@ -249,7 +398,7 @@ const styles = StyleSheet.create({
     borderRadius: MementoBorderRadius.lg,
     width: '90%',
     maxHeight: '80%',
-    shadowColor: MementoColors.shadow,
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
     shadowRadius: 20,
@@ -261,7 +410,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: MementoSpacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: MementoColors.border.light,
+    borderBottomColor: MementoColors.borderLight,
   },
   title: {
     fontSize: MementoFontSizes.xl,
@@ -295,12 +444,16 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: MementoColors.border.light,
+    borderColor: MementoColors.borderLight,
     borderRadius: MementoBorderRadius.md,
     padding: MementoSpacing.md,
     fontSize: MementoFontSizes.md,
     color: MementoColors.text.primary,
     backgroundColor: MementoColors.backgroundSecondary,
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: 'top',
   },
   addItemContainer: {
     flexDirection: 'row',
@@ -310,7 +463,7 @@ const styles = StyleSheet.create({
   addItemInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: MementoColors.border.light,
+    borderColor: MementoColors.borderLight,
     borderRadius: MementoBorderRadius.md,
     padding: MementoSpacing.md,
     fontSize: MementoFontSizes.md,
@@ -342,7 +495,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: MementoSpacing.lg,
     borderTopWidth: 1,
-    borderTopColor: MementoColors.border.light,
+    borderTopColor: MementoColors.borderLight,
   },
   cancelButton: {
     flex: 1,
@@ -350,7 +503,7 @@ const styles = StyleSheet.create({
     marginRight: MementoSpacing.sm,
     borderRadius: MementoBorderRadius.md,
     borderWidth: 1,
-    borderColor: MementoColors.border.medium,
+    borderColor: MementoColors.borderMedium,
     alignItems: 'center',
   },
   cancelButtonText: {

@@ -93,9 +93,6 @@ export function DesktopLayout({
           </View>
           
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.headerIconButton}>
-              <IconSymbol name="gearshape" size={20} color={MementoColors.text.secondary} />
-            </TouchableOpacity>
             <TouchableOpacity style={styles.headerIconButton} onPress={handleProfilePress}>
               <IconSymbol name="person.circle" size={20} color={MementoColors.text.secondary} />
             </TouchableOpacity>

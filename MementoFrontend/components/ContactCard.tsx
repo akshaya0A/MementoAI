@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Contact } from '@/types/contact';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing, MementoShadows } from '@/constants/mementoTheme';
 import { IconSymbol } from './ui/icon-symbol';
+import { SocialIcon } from './ui/social-icon';
 
 interface ContactCardProps {
   contact: Contact;
@@ -129,16 +130,45 @@ export function ContactCard({
               </Text>
             )}
             
+            {/* Social Media Links */}
+            <View style={styles.socialLinksContainer}>
+              {contact.linkedinUrl && (
+                <TouchableOpacity style={styles.socialLink}>
+                  <SocialIcon platform="linkedin" size={14} color={MementoColors.text.secondary} />
+                </TouchableOpacity>
+              )}
+              {contact.githubUrl && (
+                <TouchableOpacity style={styles.socialLink}>
+                  <SocialIcon platform="github" size={14} color={MementoColors.text.secondary} />
+                </TouchableOpacity>
+              )}
+              {contact.twitterUrl && (
+                <TouchableOpacity style={styles.socialLink}>
+                  <SocialIcon platform="x" size={14} color={MementoColors.text.secondary} />
+                </TouchableOpacity>
+              )}
+              {contact.instagramUrl && (
+                <TouchableOpacity style={styles.socialLink}>
+                  <SocialIcon platform="instagram" size={14} color={MementoColors.text.secondary} />
+                </TouchableOpacity>
+              )}
+              {contact.websiteUrl && (
+                <TouchableOpacity style={styles.socialLink}>
+                  <SocialIcon platform="globe" size={14} color={MementoColors.text.secondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+
             {/* Tags */}
             {tags.length > 0 && (
               <View style={styles.tagsContainer}>
                 {tags.slice(0, 2).map((tag, index) => (
-                  <View key={index} style={[styles.tag, { backgroundColor: MementoColors.backgroundSecondary, borderColor: MementoColors.border.medium }]}>
+                  <View key={index} style={[styles.tag, { backgroundColor: MementoColors.backgroundSecondary, borderColor: MementoColors.borderMedium }]}>
                     <Text style={[styles.tagText, { color: MementoColors.text.primary }]}>{tag}</Text>
                   </View>
                 ))}
                 {tags.length > 2 && (
-                  <View style={[styles.tag, { backgroundColor: MementoColors.backgroundSecondary, borderColor: MementoColors.border.medium }]}>
+                  <View style={[styles.tag, { backgroundColor: MementoColors.backgroundSecondary, borderColor: MementoColors.borderMedium }]}>
                     <Text style={[styles.tagText, { color: MementoColors.text.muted }]}>+{tags.length - 2}</Text>
                   </View>
                 )}
@@ -172,7 +202,7 @@ const styles = StyleSheet.create({
     padding: MementoSpacing.lg,
     marginBottom: MementoSpacing.md,
     borderWidth: 1,
-    borderColor: MementoColors.border.medium,
+    borderColor: MementoColors.borderMedium,
     ...MementoShadows.sm,
     minHeight: 160,
     position: 'relative',
@@ -224,7 +254,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: MementoSpacing.md,
     borderWidth: 1,
-    borderColor: MementoColors.border.medium,
+    borderColor: MementoColors.borderMedium,
   },
   avatarText: {
     fontSize: MementoFontSizes.md,
@@ -286,6 +316,21 @@ const styles = StyleSheet.create({
     fontSize: MementoFontSizes.xs,
     fontWeight: '500',
   },
+  socialLinksContainer: {
+    flexDirection: 'row',
+    gap: MementoSpacing.sm,
+    marginBottom: MementoSpacing.sm,
+  },
+  socialLink: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: MementoColors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: MementoColors.borderMedium,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -296,7 +341,7 @@ const styles = StyleSheet.create({
     borderRadius: MementoBorderRadius.sm,
     backgroundColor: MementoColors.backgroundSecondary,
     borderWidth: 1,
-    borderColor: MementoColors.border.medium,
+    borderColor: MementoColors.borderMedium,
     marginLeft: MementoSpacing.xs,
   },
 });

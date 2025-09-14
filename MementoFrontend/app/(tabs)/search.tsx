@@ -1,8 +1,8 @@
-import { ContactCard } from '@/components/ContactCard';
-import { DesktopLayout } from '@/components/DesktopLayout';
+import { ContactCard } from '../../components/ContactCard';
+import { DesktopLayout } from '../../components/DesktopLayout';
 import { IconSymbol } from '../../components/ui/icon-symbol';
-import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing, MementoShadows } from '@/constants/mementoTheme';
-import { useFirebaseContacts } from '@/hooks/useFirebaseContacts';
+import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing, MementoShadows } from '../../constants/mementoTheme';
+import { useFirebaseContacts } from '../../hooks/useFirebaseContacts';
 import { Contact } from '@/types/contact';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
@@ -110,10 +110,10 @@ export default function SearchScreen() {
   const handlePageChange = (page: string) => {
     setCurrentPage(page as any);
     switch (page) {
-      case 'dashboard': router.push('/(tabs)/'); break;
-      case 'contacts': router.push('/(tabs)/contacts'); break;
-      case 'search': router.push('/(tabs)/search'); break;
-      case 'export': router.push('/(tabs)/export'); break;
+      case 'dashboard': router.push({ pathname: '/'}); break;
+      case 'contacts': router.push({ pathname: '/contacts' }); break;
+      case 'search': router.push({ pathname: '/search' }); break;
+      case 'export': router.push({ pathname: '/export' }); break;
     }
   };
 
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: MementoFontSizes.md,
-    color: MementoColors.text.error,
+    color: MementoColors.error, // Fixed: use correct error color property
     textAlign: 'center',
     marginBottom: MementoSpacing.md,
   },

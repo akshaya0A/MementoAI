@@ -1,13 +1,15 @@
-import ContactCard from '@/components/ContactCard';
-import ContactForm from '@/components/ContactForm';
-import StatCard from '@/components/StatCard';
-import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '@/constants/mementoTheme';
-import useFirebaseContacts from '@/hooks/useFirebaseContacts';
-import type { Contact } from '@/types/contact';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { ContactCard } from '../../components/ContactCard';
+import { ContactForm } from '../../components/ContactForm';
+import { StatCard } from '../../components/StatCard';
+import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '../../constants/mementoTheme';
+import { useFirebaseContacts } from '../../hooks/useFirebaseContacts';
+import type { Contact } from '../../types/contact';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DesktopLayout } from '@/components/DesktopLayout';
 
 export default function DashboardScreen() {
   const { contacts, loading, error, addContact, updateContact, deleteContact } = useFirebaseContacts();
@@ -20,10 +22,10 @@ export default function DashboardScreen() {
     // Navigate to the appropriate page
     switch (page) {
       case 'dashboard':
-        router.push('/(tabs)/');
+        router.push('/');
         break;
       case 'contacts':
-        router.push('/(tabs)/contacts');
+        router.push('/contacts');
         break;
       case 'search':
         router.push('/(tabs)/search');
@@ -38,77 +40,8 @@ export default function DashboardScreen() {
     router.push(`/contact-detail?contactId=${contact.id}`);
   };
 
-  // Sample data for demo purposes
-  const sampleContacts = [
-    {
-      id: '1',
-      name: 'Paolo Rossi',
-      company: 'TechCorp',
-      role: 'Software Engineer',
-      whereFrom: 'Milan, Italy',
-      whereMet: 'HackMIT Career Fair',
-      funFacts: ['Loves proactive people and innovative solutions'],
-      notes: [],
-      encounters: [
-        { date: '2025-01-16', location: 'HackMIT networking booth', notes: 'Met at: HackMIT networking booth' }
-      ]
-    },
-    {
-      id: '2',
-      name: 'Sarah Chen',
-      company: 'StartupXYZ',
-      role: 'Product Manager',
-      whereFrom: 'San Francisco, CA',
-      whereMet: 'Tech Recruiting Dinner',
-      funFacts: ['Interested in our mobile app development approach'],
-      notes: [],
-      encounters: [
-        { date: '2025-01-11', location: 'Tech recruiting dinner table', notes: 'Met at: Tech recruiting dinner table' }
-      ]
-    },
-    {
-      id: '3',
-      name: 'Lisa Park',
-      company: 'DataFlow Solutions',
-      role: 'Talent Acquisition',
-      whereFrom: 'Seattle, WA',
-      whereMet: 'AI Summit',
-      funFacts: ['Specializes in data science and ML roles'],
-      notes: [],
-      encounters: [
-        { date: '2025-01-14', location: 'AI Summit expo hall', notes: 'Met at: AI Summit expo hall' }
-      ]
-    },
-    {
-      id: '4',
-      name: 'Alex Rivera',
-      company: 'DesignStudio',
-      role: 'UX Designer',
-      whereFrom: 'Barcelona, Spain',
-      whereMet: 'HackMIT',
-      funFacts: ['Passionate about accessible design and user research'],
-      notes: [],
-      encounters: [
-        { date: '2025-01-10', location: 'HackMIT design workshop', notes: 'Met at: HackMIT design workshop' }
-      ]
-    },
-    {
-      id: '5',
-      name: 'Marcus Johnson',
-      company: 'MegaTech Inc',
-      role: 'Engineering Director',
-      whereFrom: 'Austin, TX',
-      whereMet: 'CodeConf 2025',
-      funFacts: ['Looking for full-stack developers with React experience'],
-      notes: [],
-      encounters: [
-        { date: '2025-01-07', location: 'CodeConf speaker lounge', notes: 'Met at: CodeConf speaker lounge' }
-      ]
-    }
-  ];
-
-  // Use sample data for demo
-  const displayContacts = sampleContacts;
+  // Use real contacts from Firebase
+  const displayContacts = contacts;
 
   // Get recent encounters (last 8)
   const recentContacts = [...displayContacts]
@@ -292,21 +225,21 @@ export default function DashboardScreen() {
               <IconSymbol name="eye" size={20} color={MementoColors.primary} />
               <Text style={styles.sectionTitle}>Most Seen</Text>
             </View>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/most-seen')}>
               <Text style={styles.viewAllButton}>View All</Text>
             </TouchableOpacity>
           </View>
           
           <View style={styles.contactsGrid}>
-             {mostSeenContacts.map((contact) => (
-               <ContactCard
-                 key={contact.id}
-                 contact={contact}
-                 onPress={() => console.log('Contact pressed:', contact.name)}
-                 onViewDetail={handleViewContactDetail}
-                 showEncounterCount={true}
-               />
-             ))}
+            {mostSeenContacts.map((contact) => (
+              <ContactCard
+                key={contact.id}
+                contact={contact}
+                onPress={() => console.log('Contact pressed:', contact.name)}
+                onViewDetail={handleViewContactDetail}
+                showEncounterCount={true}
+              />
+            ))}
           </View>
         </View>
 
@@ -314,7 +247,7 @@ export default function DashboardScreen() {
         <View style={styles.recentEncountersSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>All Recent Encounters</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/recent-encounters')}>
               <Text style={styles.viewAllButton}>View All</Text>
             </TouchableOpacity>
           </View>
