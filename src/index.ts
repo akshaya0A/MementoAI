@@ -110,6 +110,7 @@ interface JSONData {
   confidence: number;
   summary: string;
   gpsLocation: LocationData | null;
+  faceEmbedding: number[] | null;
   transcript: {
     original: string;
     cleaned: string;
@@ -137,7 +138,7 @@ const schema = {
   properties: {
     info: { 
       type: 'string', 
-      description: 'Main important information to speak back (1-2 sentences about the person or opportunity)' 
+      description: 'Main important information to speak back (1-2 sentences about the person or opportunity). MUST include the person\'s name if mentioned.' 
     },
     contact: {
       type: 'string',
@@ -174,13 +175,13 @@ const validate = ajv.compile(schema);
 const claudeTool = {
   name: 'summary',
   description:
-    'Extract key information from recruiter/student conversations at events. Focus on contact details, skills, interests, and next steps.',
+    'Extract key information from recruiter/student conversations at events. Focus on person names, contact details, skills, interests, and next steps.',
   input_schema: {
     type: 'object' as const,
     properties: {
       info: { 
         type: 'string' as const, 
-        description: 'Main important information to speak back (1-2 sentences about the person or opportunity)' 
+        description: 'Main important information to speak back (1-2 sentences about the person or opportunity). MUST include the person\'s name if mentioned.' 
       },
       contact: {
         type: 'string' as const,
@@ -216,7 +217,7 @@ const openaiTool = {
   function: {
     name: 'summary',
   description:
-      'Extract key information from recruiter/student conversations at events. Focus on contact details, skills, interests, and next steps.',
+      'Extract key information from recruiter/student conversations at events. Focus on person names, contact details, skills, interests, and next steps.',
     parameters: schema as unknown as Record<string, unknown>,
   },
 };
@@ -225,6 +226,7 @@ const openaiTool = {
 const PROMPT = `You are an AI assistant helping with networking conversations at events like career fairs, hackathons, and conferences. 
 
 Extract key information from recruiter-student or professional networking conversations:
+- Person's full name (first name and last name if mentioned)
 - Contact details (email, phone, LinkedIn, business cards)
 - Skills, technologies, projects, or interests discussed
 - Location where the person was met (booth number, company name, event area, etc.)
@@ -232,11 +234,60 @@ Extract key information from recruiter-student or professional networking conver
 - Next steps or follow-up actions
 - Important details about the person or opportunity
 
+CRITICAL: Always include the person's name in the summary. If you can identify both first and last name, use the full name. If only first name is available, use that. Make the summary personal and include the name prominently.
+
 Focus on actionable information that helps especially with follow-up and relationship building.`;
 
-// Check if wake word is detected
+// Comprehensive wake word detection with multiple options
+const WAKE_WORDS = [
+  'hey memento',
+  'hey memento ai',
+  'start recording',
+  'start taking notes',
+  'begin recording',
+  'capture this',
+  'remember this',
+  'take notes',
+  'start notes',
+  'begin notes',
+  'record conversation',
+  'log conversation',
+  'save conversation',
+  'document this',
+  'track this',
+  'memento start',
+  'memento begin',
+  'ai assistant',
+  'smart glasses',
+  'start listening'
+];
+
+// Check if any wake word is detected
 function hasWakeWord(text: string): boolean {
-  return text.toLowerCase().includes((WAKE_WORD || 'hey memento').toLowerCase());
+  const lowerText = text.toLowerCase().trim();
+  
+  // Check custom wake word first if specified
+  const customWakeWord = WAKE_WORD?.toLowerCase().trim();
+  if (customWakeWord && lowerText.includes(customWakeWord)) {
+    return true;
+  }
+  
+  // Check against predefined wake words
+  return WAKE_WORDS.some(wakeWord => lowerText.includes(wakeWord.toLowerCase()));
+}
+
+// Get the detected wake word for logging purposes
+function getDetectedWakeWord(text: string): string | null {
+  const lowerText = text.toLowerCase().trim();
+  
+  // Check custom wake word first
+  const customWakeWord = WAKE_WORD?.toLowerCase().trim();
+  if (customWakeWord && lowerText.includes(customWakeWord)) {
+    return customWakeWord;
+  }
+  
+  // Find matching predefined wake word
+  return WAKE_WORDS.find(wakeWord => lowerText.includes(wakeWord.toLowerCase())) || null;
 }
 
 // Pre-process transcript to improve accuracy
@@ -347,7 +398,7 @@ async function callClaude(
         messages: [
           {
             role: 'user',
-            content: `Extract key networking information from this conversation at an event. Focus on contact details, skills/interests, opportunities, location where met, and next steps.\n\nConversation:\n${transcript}`,
+            content: `Extract key networking information from this conversation at an event. Focus on the person's name (first and last name if mentioned), contact details, skills/interests, opportunities, location where met, and next steps.\n\nIMPORTANT: Always include the person's name in the summary. Make it personal and prominent.\n\nConversation:\n${transcript}`,
           },
         ],
         tools: [claudeTool],
@@ -418,7 +469,7 @@ async function callOpenAI(
         { role: 'system', content: PROMPT },
         {
           role: 'user',
-          content: `Extract key networking information from this conversation at an event. Focus on contact details, skills/interests, opportunities, location where met, and next steps.\n\nConversation:\n${transcript}`,
+          content: `Extract key networking information from this conversation at an event. Focus on the person's name (first and last name if mentioned), contact details, skills/interests, opportunities, location where met, and next steps.\n\nIMPORTANT: Always include the person's name in the summary. Make it personal and prominent.\n\nConversation:\n${transcript}`,
         },
       ];
 
@@ -569,6 +620,7 @@ function setupPipeline(session: AppSession, sessionLocation: LocationData | null
   let segments: string[] = []; // finalized chunks
   let partial: string = "";    // latest interim text
   let idleTimeout: NodeJS.Timeout | null = null;
+  let currentFaceEmbedding: number[] | null = null; // Store face embedding from wake word
 
   // Long safety timeout; normal stop is via "done"
   const SILENCE_MS = 120_000; // 2 minutes
@@ -592,8 +644,10 @@ function setupPipeline(session: AppSession, sessionLocation: LocationData | null
     const wordCount = live.split(/\s+/).filter(Boolean).length;
     const charCount = live.length;
     
+    const stopSuggestions = "Say 'done', 'thanks', 'that's it', or 'goodbye' to finish.";
+    
     session.layouts.showTextWall(
-      `🎤 Recording... say "done" to finish.\n\n${live ? live : "..."}\n\n📊 ${wordCount} words, ${charCount} chars`
+      `🎤 Recording... ${stopSuggestions}\n\n${live ? live : "..."}\n\n📊 ${wordCount} words, ${charCount} chars`
     );
   };
 
@@ -601,7 +655,7 @@ function setupPipeline(session: AppSession, sessionLocation: LocationData | null
     collecting = true;
     segments = [];
     partial = "";
-    await session.audio.speak("Recording. Say done when finished.");
+    await session.audio.speak("Recording started. Say done, thanks, or goodbye when finished.");
     updateLiveHUD();
     resetIdleTimer();
   };
@@ -679,6 +733,7 @@ function setupPipeline(session: AppSession, sessionLocation: LocationData | null
           confidence: summary.conf,
           summary: summary.info,
           gpsLocation: locationData || null,
+          faceEmbedding: currentFaceEmbedding,
           transcript: {
             original: textNowRaw,
             cleaned: cleanedTranscript,
@@ -690,7 +745,7 @@ function setupPipeline(session: AppSession, sessionLocation: LocationData | null
         writeFileSync(filepath, JSON.stringify(jsonData, null, 2));
         console.log(`📄 Saved networking data to: ${filename}`);
         
-        // Send to backend API (ready for new endpoint)
+        // Send to backend API using /ingestEncounter endpoint
         const backendSuccess = await sendToBackend(jsonData, session);
         
         // Show success message in UI
@@ -739,7 +794,7 @@ function setupPipeline(session: AppSession, sessionLocation: LocationData | null
 
   // ============== Transcription handling ===================================
 
-  const onTranscription = (data: TranscriptionData) => {
+  const onTranscription = async (data: TranscriptionData) => {
     // Ignore all transcription if we're processing
     if (processing) {
       return;
@@ -757,13 +812,37 @@ function setupPipeline(session: AppSession, sessionLocation: LocationData | null
 
     // Wake word: arm and start immediately so we do not miss first words
     if (!armed) {
-      if (lower.includes((WAKE_WORD || 'start recording').toLowerCase())) {
+      if (hasWakeWord(text)) {
         armed = true;
-        session.logger.info("Wake phrase detected. Starting recorder and capturing photo.");
+        const detectedWakeWord = getDetectedWakeWord(text);
+        const recognitionStatus = FACE_RECOGNITION_ENABLED ? "face recognition and " : "";
+        session.logger.info(`Wake phrase detected: "${detectedWakeWord}". Starting ${recognitionStatus}recorder.`);
         
-        // Capture photo when wake word is detected
-        capturePhotoOnWakeWord(session);
+        if (FACE_RECOGNITION_ENABLED) {
+          // Capture photo and check for recognition
+          const embedding = await capturePhotoOnWakeWord(session);
+          
+          if (embedding) {
+            // Store embedding for later use
+            currentFaceEmbedding = embedding;
+            
+            // Check if person is already recognized
+            const recognition = await checkPersonRecognition(embedding, session);
+            
+            if (recognition) {
+              // Person already known - block transcription and show previous summary
+              await handleRecognizedPerson(recognition, session);
+              armed = false; // Reset armed state
+              return;
+            }
+          }
+        } else {
+          // Face recognition disabled - just capture photo for storage
+          await capturePhotoOnWakeWord(session);
+          currentFaceEmbedding = null;
+        }
         
+        // Proceed with normal transcription
         startCollection();
       }
       return;
@@ -774,10 +853,25 @@ function setupPipeline(session: AppSession, sessionLocation: LocationData | null
       startCollection();
     }
 
-    // Stop if any stop phrase appears
-    const STOP_PHRASES = ["done", "that's it", "stop recording", "stop"];
+    // Comprehensive stop phrases for natural conversation ending
+    const STOP_PHRASES = [
+      "done", "that's it", "stop recording", "stop", "finished", "complete",
+      "that's all", "that's everything", "end recording", "stop taking notes",
+      "end notes", "finish notes", "conversation over", "we're done",
+      "thank you", "thanks", "goodbye", "bye", "see you later",
+      "catch you later", "talk to you later", "nice meeting you",
+      "great talking with you", "that concludes", "that wraps up",
+      "that covers it", "nothing more", "all set", "we're good",
+      "that's everything I wanted to say", "I think we covered everything",
+      "memento stop", "memento end", "ai stop", "assistant stop"
+    ];
+    
     const hasStop = STOP_PHRASES.some((p) => lower.includes(p));
-    if (hasStop && (isFinal || lower.endsWith("done") || lower.endsWith("stop"))) {
+    const isNaturalEnding = lower.endsWith("done") || lower.endsWith("stop") || 
+                           lower.endsWith("thanks") || lower.endsWith("bye") ||
+                           lower.endsWith("goodbye") || lower.endsWith("finished");
+    
+    if (hasStop && (isFinal || isNaturalEnding)) {
       session.logger.info("🛑 Stop phrase detected - immediately stopping all recording");
       
       // Immediately stop all recording and processing
@@ -828,8 +922,9 @@ function setupPipeline(session: AppSession, sessionLocation: LocationData | null
     // Update visual indicator based on voice activity
     const live = liveNoteText();
     const status = isSpeaking ? "🎤 Speaking..." : "⏸️ Listening...";
+    const stopSuggestions = "Say 'done', 'thanks', 'that's it', or 'goodbye' to finish.";
     session.layouts.showTextWall(
-      `${status}\n\n${live ? live : "..."}\n\nSay "done" to finish.`
+      `${status}\n\n${live ? live : "..."}\n\n${stopSuggestions}`
     );
   };
 
@@ -856,18 +951,37 @@ function setupPipeline(session: AppSession, sessionLocation: LocationData | null
   };
 }
 
-// Track if greeting has been spoken to prevent duplicates
-let greetingSpoken = false;
+// Face recognition toggle - set to false to disable temporarily
+const FACE_RECOGNITION_ENABLED = false;
+
+// Global session management to prevent duplicate greetings
+let globalSessionCounter = 0;
+let hasGreetedInLastMinute = false;
+let lastGreetingTime = 0;
+let isStartingSession = false;
+const GREETING_COOLDOWN_MS = 30000; // 30 seconds between greetings
+
+// More robust greeting cooldown check
+function shouldPlayGreeting(): boolean {
+  const now = Date.now();
+  const timeSinceLastGreeting = now - lastGreetingTime;
+  
+  if (timeSinceLastGreeting >= GREETING_COOLDOWN_MS) {
+    lastGreetingTime = now;
+    hasGreetedInLastMinute = true;
+    return true;
+  }
+  
+  return false;
+}
 
 // Function to capture photo when wake word is detected
-async function capturePhotoOnWakeWord(session: AppSession): Promise<void> {
+async function capturePhotoOnWakeWord(session: AppSession): Promise<number[] | null> {
   try {
-    // console.log('📸 Wake word detected - capturing photo...');
+    session.logger.info('📸 Wake word detected - capturing photo...');
     const photo = await session.camera.requestPhoto();
 
-    // console.log(`Photo captured on wake word: ${photo.filename}`);
-    // console.log(`Size: ${photo.size} bytes`);
-    // console.log(`Type: ${photo.mimeType}`);
+    session.logger.info(`Photo captured on wake word: ${photo.filename}`);
 
     // Save to file locally
     const filename = sanitizeFilename(`wake_word_photo_${Date.now()}.jpg`);
@@ -883,42 +997,187 @@ async function capturePhotoOnWakeWord(session: AppSession): Promise<void> {
     writeFileSync(filepath, photo.buffer);
     session.logger.info(`Wake word photo saved: ${filename}`);
 
-    // Send to external API
+    // Send to external API for storage
     await uploadPhotoToAPI(photo.buffer, photo.mimeType, session);
     
-    // console.log('✅ Photo captured and saved on wake word');
+    if (FACE_RECOGNITION_ENABLED) {
+      // Generate face embedding for recognition
+      const embedding = await generateFaceEmbedding(photo.buffer, photo.mimeType, session);
+      return embedding;
+    } else {
+      session.logger.info("Face recognition disabled - skipping embedding generation");
+      return null;
+    }
     
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('❌ Failed to capture photo on wake word:', error);
     session.logger.error(`Wake word photo capture failed: ${errorMessage}`);
+    return null;
+  }
+}
+
+// Function to generate face embeddings from photo
+async function generateFaceEmbedding(buffer: Buffer, mimeType: string, session: AppSession): Promise<number[] | null> {
+  try {
+    session.logger.info("Generating face embedding from photo...");
+    const formData = new FormData();
+    const filename = `photo_${Date.now()}.jpg`;
+    formData.append('photo', new Blob([buffer], { type: mimeType }), filename);
+    
+    // Add timeout to prevent hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    
+    const response = await fetch('http://127.0.0.1:5000/embed', { 
+      method: 'POST', 
+      body: formData,
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (response.ok) {
+      const result = await response.json();
+      if (result.embedding && Array.isArray(result.embedding) && result.embedding.length === 128) {
+        session.logger.info("Face embedding generated successfully");
+        return result.embedding;
+      } else {
+        session.logger.warn("Invalid embedding format received");
+        return null;
+      }
+    } else {
+      session.logger.error(`Face embedding generation failed: ${response.status}`);
+      return null;
+    }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    if (errorMessage.includes('fetch')) {
+      session.logger.warn("Face recognition service not available at localhost:5000 - continuing without face recognition");
+      // Don't treat this as an error, just log it
+    } else {
+      session.logger.error(`Face embedding generation error: ${errorMessage}`);
+    }
+    return null;
+  }
+}
+
+// Function to check if person is already recognized
+async function checkPersonRecognition(embedding: number[], session: AppSession): Promise<any | null> {
+  try {
+    session.logger.info("Checking person recognition...");
+    
+    // Add timeout to prevent hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    const response = await fetch('https://mementoai-backend-528890859039.us-central1.run.app/identifyEmbedding', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        uid: USER_ID || 'mentra_user',
+        vector: embedding,
+        k: 5,
+        threshold: 0.55
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    
+    if (result.status === 'recognized' && result.person) {
+      session.logger.info(`Person recognized: ${result.person.displayName} (confidence: ${result.confidence})`);
+      return result;
+    } else {
+      session.logger.info("Person not recognized - new encounter");
+      return null;
+    }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    session.logger.warn(`Person recognition check failed: ${errorMessage} - continuing with new encounter`);
+    return null;
+  }
+}
+
+// Function to handle when a person is recognized (show previous summary)
+async function handleRecognizedPerson(recognition: any, session: AppSession): Promise<void> {
+  try {
+    const person = recognition.person;
+    const confidence = recognition.confidence;
+    
+    session.logger.info(`Handling recognized person: ${person.displayName}`);
+    
+    // Show recognition message
+    await session.audio.speak(`I recognize ${person.displayName}. Here's what I remember from your previous meeting.`);
+    
+    // Create summary from previous encounter data
+    let summary = person.summary || "No previous summary available.";
+    
+    if (person.company) {
+      summary += ` They work at ${person.company}.`;
+    }
+    
+    if (person.role) {
+      summary += ` Their role is ${person.role}.`;
+    }
+    
+    // Speak the previous summary
+    await session.audio.speak(summary);
+    
+    // Show on screen
+    const displayText = `👤 RECOGNIZED: ${person.displayName}\n\n📋 Previous Summary:\n${summary}\n\n🎯 Confidence: ${Math.round(confidence * 100)}%`;
+    session.layouts.showTextWall(displayText);
+    
+    // Optional: Ask if they want to update the summary
+    await session.audio.speak("Would you like to add anything new to your notes about this person? Say 'update notes' if you'd like to add more information.");
+    
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    session.logger.error(`Error handling recognized person: ${errorMessage}`);
+    await session.audio.speak("Sorry, I had trouble retrieving the previous information.");
   }
 }
 
 // Function to upload photo to API (shared between wake word and button press)
 async function uploadPhotoToAPI(buffer: Buffer, mimeType: string, session: AppSession): Promise<void> {
   try {
-    // console.log("Uploading photo to API...");
-    const formData = new FormData();
-    const filename = `photo_${Date.now()}.jpg`;
-    formData.append('photo', new Blob([buffer], { type: mimeType }), filename);
-    
-    const response = await fetch('http://127.0.0.1:5000/upload', { 
-      method: 'POST', 
-      body: formData 
-    });
-    
-    if (response.ok) {
-      // console.log("Photo uploaded successfully");
-      session.logger.info("Photo uploaded to API successfully");
+    if (FACE_RECOGNITION_ENABLED) {
+      // console.log("Uploading photo to API...");
+      const formData = new FormData();
+      const filename = `photo_${Date.now()}.jpg`;
+      formData.append('photo', new Blob([buffer], { type: mimeType }), filename);
+      
+      const response = await fetch('http://127.0.0.1:5000/upload', { 
+        method: 'POST', 
+        body: formData 
+      });
+      
+      if (response.ok) {
+        // console.log("Photo uploaded successfully");
+        session.logger.info("Photo uploaded to API successfully");
+      } else {
+        // console.error(`Photo upload failed: ${response.status}`);
+        session.logger.error(`Photo upload failed: ${response.status}`);
+      }
     } else {
-      // console.error(`Photo upload failed: ${response.status}`);
-      session.logger.error(`Photo upload failed: ${response.status}`);
+      session.logger.info("Photo upload skipped - face recognition disabled");
     }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Failed to upload photo:", error);
-    session.logger.error(`Photo upload error: ${errorMessage}`);
+    if (FACE_RECOGNITION_ENABLED) {
+      console.error("Failed to upload photo:", error);
+      session.logger.error(`Photo upload error: ${errorMessage}`);
+    } else {
+      session.logger.info("Photo upload skipped - face recognition disabled");
+    }
   }
 }
 
@@ -1041,7 +1300,7 @@ async function sendToBackend(jsonData: JSONData, session: AppSession): Promise<b
   try {
     // console.log('🚀 Sending networking data to backend API...');
     
-    // Transform our JSON data to match the /ingestAudio endpoint format
+    // Transform our JSON data to match the /ingestEncounter endpoint format
     const backendPayload = {
       uid: USER_ID || 'mentra_user', // Use env var or default
       sessionId: `networking_${Date.now()}`, // Unique session ID
@@ -1049,16 +1308,23 @@ async function sendToBackend(jsonData: JSONData, session: AppSession): Promise<b
       location: jsonData.location,
       summary: jsonData.summary,
       transcript: jsonData.transcript?.original || '',
-      skills: Array.isArray(jsonData.skills) ? jsonData.skills.join(', ') : jsonData.skills,
-      nextSteps: jsonData.nextSteps,
+      rawTranscript: jsonData.transcript?.raw || null,
       confidence: Math.round(jsonData.confidence * 100), // Convert 0-1 to 0-100
-      contactInfo: jsonData.contactInfo,
-      // Include additional metadata
-      gpsLocation: jsonData.gpsLocation,
-      rawTranscript: jsonData.transcript?.raw || null
+      nextSteps: jsonData.nextSteps,
+      skills: Array.isArray(jsonData.skills) ? jsonData.skills.join(', ') : jsonData.skills,
+      // GPS coordinates in the format expected by new API
+      gps: {
+        lat: jsonData.gpsLocation?.latitude || 42.3601, // Default to MIT if no location
+        lng: jsonData.gpsLocation?.longitude || -71.0942
+      },
+      // Contact information - extract email if available
+      contactEmail: extractEmailFromContact(jsonData.contactInfo),
+      name: extractNameFromContact(jsonData.contactInfo),
+      // Face embedding for recognition (if available)
+      vector: jsonData.faceEmbedding || null
     };
     
-    const response = await fetch('https://mementoai-backend-528890859039.us-central1.run.app/ingestAudio', {
+    const response = await fetch('https://mementoai-backend-528890859039.us-central1.run.app/ingestEncounter', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1072,6 +1338,12 @@ async function sendToBackend(jsonData: JSONData, session: AppSession): Promise<b
 
     const result = await response.json();
     // console.log('✅ Data sent to backend successfully:', result);
+    
+    // Log recognition status if available
+    if (result.person) {
+      session.logger.info(`Person recognized: ${result.person.displayName} (ID: ${result.person.id})`);
+    }
+    
     return true;
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1080,74 +1352,144 @@ async function sendToBackend(jsonData: JSONData, session: AppSession): Promise<b
   }
 }
 
+// Helper function to extract email from contact info
+function extractEmailFromContact(contactInfo: string): string | null {
+  if (!contactInfo) return null;
+  
+  // Simple email regex
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+  const match = contactInfo.match(emailRegex);
+  return match ? match[0].toLowerCase() : null;
+}
+
+// Helper function to extract name from contact info
+function extractNameFromContact(contactInfo: string): string | null {
+  if (!contactInfo) return null;
+  
+  // Remove email and common patterns, extract potential name
+  let cleaned = contactInfo
+    .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '') // Remove emails
+    .replace(/[0-9()-]/g, ' ') // Remove phone numbers
+    .replace(/linkedin|twitter|github|phone|email/gi, '') // Remove social media/platform names
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim();
+  
+  // Look for patterns that might be names (First Last, First Middle Last, etc.)
+  const namePatterns = [
+    /^[A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)*$/, // First Last or First Middle Last
+    /^[A-Z][a-z]+ [A-Z]\.\s*[A-Z][a-z]+$/, // First M. Last
+    /^[A-Z][a-z]+ [A-Z][a-z]+ [A-Z][a-z]+$/ // First Middle Last (3 words)
+  ];
+  
+  // Check if the cleaned string matches name patterns
+  for (const pattern of namePatterns) {
+    if (pattern.test(cleaned)) {
+      return cleaned;
+    }
+  }
+  
+  // If we have something meaningful left (but not a clear name pattern), return it
+  if (cleaned.length > 2 && cleaned.length < 50 && /^[A-Za-z\s\.]+$/.test(cleaned)) {
+    return cleaned;
+  }
+  
+  return null;
+}
+
 async function onStart(session: AppSession) {
-  // ABSOLUTELY FIRST: Get location before ANYTHING else
-  // console.log('🚀 Getting location FIRST before any other setup...');
-  let sessionLocation = null;
+  // Protection against rapid session creation
+  if (isStartingSession) {
+    console.log('⏸️ Session already starting, skipping duplicate...');
+    return;
+  }
+  
+  isStartingSession = true;
   
   try {
-    // For now, use placeholder location (Boston, MIT)
-    sessionLocation = await getPlaceholderLocation();
+    // ABSOLUTELY FIRST: Get location before ANYTHING else
+    console.log('🚀 Starting new session...');
+    let sessionLocation = null;
     
-    // COMMENTED OUT: Real location capture
-    // sessionLocation = await getContinuousLocation(session);
+    try {
+      // For now, use placeholder location (Boston, MIT)
+      sessionLocation = await getPlaceholderLocation();
+      
+      // COMMENTED OUT: Real location capture
+      // sessionLocation = await getContinuousLocation(session);
+      
+      if (sessionLocation) {
+        // console.log(`✅ Location captured FIRST: ${sessionLocation.latitude}, ${sessionLocation.longitude} - ${sessionLocation.locationName}`);
+      } else {
+        // console.log('⚠️ Location capture failed - continuing without location');
+      }
+    } catch (locationError: unknown) {
+      const errorMessage = locationError instanceof Error ? locationError.message : String(locationError);
+      console.error('❌ Location capture error:', errorMessage);
+    }
+
+    // NOW: Do all other session setup after location is captured
+    session.logger.info(`[Session] Started: ${Date.now()}`);
     
-    if (sessionLocation) {
-      // console.log(`✅ Location captured FIRST: ${sessionLocation.latitude}, ${sessionLocation.longitude} - ${sessionLocation.locationName}`);
+    // Increment session counter
+    globalSessionCounter++;
+    console.log(`📊 Session #${globalSessionCounter} started`);
+    
+    // Combined greeting (with robust cooldown to prevent duplicates across sessions)
+    console.log(`⏰ Greeting check: shouldPlay=${shouldPlayGreeting()}, hasGreetedInLastMinute=${hasGreetedInLastMinute}`);
+    
+    if (shouldPlayGreeting()) {
+      try {
+        console.log('🗣️ Playing greeting message...');
+        
+        // Combine location and wake word info into one message
+        const locationInfo = sessionLocation 
+          ? `Location captured at ${sessionLocation.locationName}. `
+          : 'Location unavailable. ';
+        
+        const wakeWordMessage = WAKE_WORD 
+          ? `Say "${WAKE_WORD}" or can you hear me to start capturing conversation details.`
+          : `Say "hey memento", "start recording", "take notes", or "capture this" to begin.`;
+        
+        const combinedMessage = `${locationInfo}Event networking assistant ready. ${wakeWordMessage}`;
+        await session.audio.speak(combinedMessage);
+        
+        console.log('✅ Greeting message completed');
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`❌ Greeting failed: ${errorMessage}`);
+        session.logger.warn(`[Audio] Combined greeting failed: ${errorMessage}`);
+      }
     } else {
-      // console.log('⚠️ Location capture failed - continuing without location');
+      console.log('⏸️ Skipping greeting - already greeted recently');
     }
-  } catch (locationError: unknown) {
-    const errorMessage = locationError instanceof Error ? locationError.message : String(locationError);
-    console.error('❌ Location capture error:', errorMessage);
-  }
 
-  // NOW: Do all other session setup after location is captured
-  session.logger.info(`[Session] Started: ${Date.now()}`);
-  
-  // Greet user with location info
-  if (sessionLocation) {
-    try {
-      await session.audio.speak(`Location captured at ${sessionLocation.locationName}. Event networking assistant ready.`);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      session.logger.warn(`[Audio] Location greeting failed: ${errorMessage}`);
-    }
-  } else {
-    try {
-      await session.audio.speak("Event networking assistant ready. Location unavailable.");
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      session.logger.warn(`[Audio] Fallback greeting failed: ${errorMessage}`);
-    }
-  }
+    const pipeline = setupPipeline(session, sessionLocation);
 
-  // Greet user with wake word info (only once)
-  if (!greetingSpoken) {
-    try {
-      await session.audio.speak(`Say "${WAKE_WORD}" to start capturing conversation details.`);
-      greetingSpoken = true;
+    // Cleanup on session end
+    session.on('close', async () => {
+      try {
+        pipeline.unsubscribe();
+        await pipeline.stop(); // Use the improved stop function
+        
+        // Session cleanup completed
+        
+        session.logger.info('[Session] Cleaned up subscriptions, audio, and greeting tracking.');
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        session.logger.warn(
+          `[Session] Cleanup error: ${errorMessage}`
+        );
+      }
+    });
+    
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    session.logger.warn(`[Audio] Greeting speak failed: ${errorMessage}`);
-    }
+    console.error(`❌ Session start error: ${errorMessage}`);
+    session.logger.error(`[Session] Start error: ${errorMessage}`);
+  } finally {
+    // Reset the session starting flag
+    isStartingSession = false;
   }
-
-  const pipeline = setupPipeline(session, sessionLocation);
-
-  // Cleanup on session end
-  session.on('close', async () => {
-    try {
-      pipeline.unsubscribe();
-      await pipeline.stop(); // Use the improved stop function
-      session.logger.info('[Session] Cleaned up subscriptions and audio.');
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      session.logger.warn(
-        `[Session] Cleanup error: ${errorMessage}`
-      );
-    }
-  });
 }
 
 // ---------- Custom App Server Implementation ----------
@@ -1217,30 +1559,48 @@ class Server extends AppServer {
 
 // ---------- Server bootstrap ----------
 async function main() {
+  console.log('🚀 Starting MementoAI server...');
+  
   const server = new Server({
     apiKey: MENTRAOS_API_KEY as string,
     packageName: PACKAGE_NAME as string,
     port: Number(PORT),
   });
 
-  process.on('SIGINT', () => {
-    console.log('Shutting down...');
+  // Handle graceful shutdown
+  const gracefulShutdown = (signal: string) => {
+    console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
     server.stop();
     process.exit(0);
+  };
+
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  
+  // Handle uncaught exceptions to prevent crashes
+  process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught Exception:', error);
+    gracefulShutdown('uncaughtException');
   });
-  process.on('SIGTERM', () => {
-    console.log('Shutting down...');
-    server.stop();
-    process.exit(0);
+  
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    gracefulShutdown('unhandledRejection');
   });
 
-  await server.start();
-  // console.log(`MementoAI app server listening on :${PORT}`);
+  try {
+    await server.start();
+    console.log(`✅ MementoAI app server listening on port ${PORT || 3030}`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Failed to start server: ${errorMessage}`);
+    process.exit(1);
+  }
 }
 
 main().catch(error => {
   const errorMessage = error instanceof Error ? error.message : String(error);
-  console.error(`Fatal: ${errorMessage}`);
+  console.error(`❌ Fatal error in main: ${errorMessage}`);
   process.exit(1);
 });
 
@@ -1250,8 +1610,10 @@ Event Networking Assistant - Wake Word → Conversation → Structured Info
 Perfect for career fairs, hackathons, conferences, and networking events!
 
 Features:
-- Listens for wake word (configurable via WAKE_WORD env var, default: "hey memento")
-- After wake word, captures networking conversation until silence
+- Listens for multiple natural wake words (configurable via WAKE_WORD env var)
+- Default wake words: "hey memento", "start recording", "take notes", "capture this", etc.
+- After wake word, captures networking conversation until natural stop phrases
+- Natural stop phrases: "done", "thanks", "goodbye", "that's it", etc.
 - Extracts contact details, skills, interests, and next steps
 - Speaks back structured networking information
 
@@ -1270,13 +1632,13 @@ Environment Variables:
 - OPENAI_API_KEY: Your OpenAI API key (fallback)
 - CLAUDE_MODEL: Claude model (default: claude-3-5-sonnet-20240620)
 - OPENAI_MODEL: OpenAI model (default: gpt-4o-mini)
-- WAKE_WORD: Wake word to trigger listening (default: "hey memento")
+- WAKE_WORD: Custom wake word to trigger listening (optional, uses comprehensive defaults if not set)
 - PORT: Server port (default: 3030)
 
 Usage:
 1. Start the app at your event
-2. Say the wake word when starting a conversation
-3. Have your networking conversation
-4. Wait for silence (2 seconds)
+2. Say any wake word when starting a conversation ("hey memento", "start recording", "take notes", etc.)
+3. Have your networking conversation naturally
+4. End conversation naturally with phrases like "thanks", "goodbye", "that's it", or "done"
 5. Hear structured summary with contact details and next steps
 */
