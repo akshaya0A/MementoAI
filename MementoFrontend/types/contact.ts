@@ -12,6 +12,7 @@ export interface Contact {
   websiteUrl?: string;
   deepResearchArea?: string; // Deep research area for description
   deepResearchEnabled?: boolean; // Whether deep research is enabled for this contact
+  deepResearchData?: any; // JSON data received from deep research API
   socialMedia: {
     platform: string;
     url: string;

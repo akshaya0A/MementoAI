@@ -3,6 +3,7 @@ import { DesktopLayout } from '../../components/DesktopLayout';
 import { IconSymbol } from '../../components/ui/icon-symbol';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing, MementoShadows } from '../../constants/mementoTheme';
 import { useFirebaseContacts } from '../../hooks/useFirebaseContacts';
+import { callDeepResearchAPI } from '../../lib/firebaseService';
 import { Contact } from '@/types/contact';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
@@ -126,19 +127,34 @@ export default function SearchScreen() {
       // Update the contact in Firebase with the new deep research state
       const contactToUpdate = contacts.find(c => c.id === contactId);
       if (contactToUpdate) {
-        const updates = {
+        const updates: Partial<Contact> = {
           deepResearchEnabled: enabled,
           updatedAt: new Date()
         };
-        await updateContact(contactId, updates);
         
-        // TODO: Replace with actual API call when backend is ready
         if (enabled) {
-          console.log(`Deep research enabled for contact: ${contactToUpdate.name} (${contactId})`);
-          // await deepResearchAPI(contactId);
+          // Call the deep research API
+          try {
+            console.log(`Starting deep research for contact: ${contactToUpdate.name} (${contactId})`);
+            
+            // Create a summary from available contact data
+            const summary = `${contactToUpdate.role} at ${contactToUpdate.company}. Met at: ${contactToUpdate.whereMet}. From: ${contactToUpdate.whereFrom}. ${contactToUpdate.notes.length > 0 ? `Notes: ${contactToUpdate.notes.map(n => n.content).join(' ')}` : ''}`;
+            
+            const deepResearchData = await callDeepResearchAPI(contactToUpdate.name, summary);
+            
+            // Update the contact with both the enabled state and the API response data
+            updates.deepResearchData = deepResearchData;
+            
+            console.log(`Deep research completed for contact: ${contactToUpdate.name}`);
+          } catch (apiError) {
+            console.error('Deep research API call failed:', apiError);
+            return; // Don't update the contact if API call fails
+          }
         } else {
           console.log(`Deep research disabled for contact: ${contactToUpdate.name} (${contactId})`);
         }
+        
+        await updateContact(contactId, updates);
       }
     } catch (error) {
       console.error('Failed to update deep research state:', error);

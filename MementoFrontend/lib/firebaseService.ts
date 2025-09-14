@@ -337,3 +337,30 @@ export const getRecentContacts = async (): Promise<Contact[]> => {
     throw error;
   }
 };
+
+// Deep Research API call
+export const callDeepResearchAPI = async (name: string, summary: string): Promise<any> => {
+  try {
+    const response = await fetch('https://mementoai-backend-528890859039.us-central1.run.app/deepResearch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: name,
+        summary: summary
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Deep research API call failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log('Deep research API response:', data);
+    return data;
+  } catch (error) {
+    console.error('Error calling deep research API:', error);
+    throw error;
+  }
+};
