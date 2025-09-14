@@ -1,74 +1,74 @@
 export const MementoColors = {
-  // Enhanced professional color palette
-  primary: '#0891B2', // Professional cyan
-  primaryLight: '#22D3EE', // Light cyan
-  primaryDark: '#0E7490', // Dark cyan
-  secondary: '#64748B', // Sophisticated slate
-  tertiary: '#8B5CF6', // Elegant purple accent
+  // Professional neutral color palette
+  primary: '#2563EB', // Professional blue
+  primaryLight: '#3B82F6', // Light blue
+  primaryDark: '#1D4ED8', // Dark blue
+  secondary: '#374151', // Sophisticated slate
+  tertiary: '#059669', // Professional green accent
   
   // Background colors - Clean whites and greys
   background: '#FFFFFF', // Pure white
-  backgroundSecondary: '#F9FAFB', // Very light grey
+  backgroundSecondary: '#F8FAFC', // Very light grey
   backgroundCard: '#FFFFFF', // White cards
-  backgroundSidebar: '#F8F9FA', // Light grey sidebar
-  backgroundGradient: ['#FFFFFF', '#F9FAFB'], // Subtle gradient
+  backgroundSidebar: '#F1F5F9', // Light grey sidebar
+  backgroundGradient: ['#FFFFFF', '#F8FAFC'], // Subtle gradient
   
-  // Text colors - Professional blacks
-  textPrimary: '#000000', // Pure black
-  textSecondary: '#374151', // Dark grey
-  textTertiary: '#6B7280', // Medium grey
-  textMuted: '#9CA3AF', // Light grey
+  // Text colors - Professional blacks and greys
+  textPrimary: '#0F172A', // Very dark slate
+  textSecondary: '#334155', // Dark slate
+  textTertiary: '#64748B', // Medium slate
+  textMuted: '#94A3B8', // Light slate
   
   // Border colors - Clean and minimal
-  border: '#E5E7EB', // Light grey border
-  borderLight: '#F3F4F6', // Very light border
-  borderMedium: '#D1D5DB', // Medium border
-  borderDark: '#6B7280', // Dark grey border
+  border: '#E2E8F0', // Light slate border
+  borderLight: '#F1F5F9', // Very light border
+  borderMedium: '#CBD5E1', // Medium border
+  borderDark: '#64748B', // Dark slate border
   
-  // Status colors - Enhanced professional palette
-  success: '#10B981', // Vibrant green
-  warning: '#F59E0B', // Warm amber
-  error: '#EF4444', // Clear red
-  info: '#0891B2', // Professional cyan
+  // Status colors - Professional palette
+  success: '#059669', // Professional green
+  warning: '#D97706', // Professional amber
+  error: '#DC2626', // Professional red
+  info: '#0EA5E9', // Professional blue
   
   // Accent colors - Minimal and professional
-  accent: '#0891B2', // Subtle professional cyan
-  accentLight: '#22D3EE', // Light cyan
+  accent: '#2563EB', // Professional blue accent
+  accentLight: '#3B82F6', // Light blue
   
   // Legacy support for existing components
   text: {
-    primary: '#000000', // Pure black
-    secondary: '#374151', // Dark grey
-    muted: '#6B7280', // Medium grey
+    primary: '#0F172A', // Very dark slate
+    secondary: '#334155', // Dark slate
+    muted: '#64748B', // Medium slate
     white: '#FFFFFF' // White
   },
   
   border: {
-    light: '#F3F4F6', // Very light border
-    medium: '#D1D5DB', // Medium border
-    dark: '#6B7280' // Dark grey border
+    light: '#F1F5F9', // Very light border
+    medium: '#CBD5E1', // Medium border
+    dark: '#64748B' // Dark slate border
   },
   
-  // Stats colors - All the same color for consistency
+  // Stats colors - Consistent professional palette
   stats: {
-    contacts: '#374151', // Dark grey
-    encounters: '#374151', // Dark grey
-    thisWeek: '#374151', // Dark grey
-    notes: '#374151' // Dark grey
+    contacts: '#2563EB', // Professional blue
+    encounters: '#059669', // Professional green
+    thisWeek: '#0EA5E9', // Professional blue
+    notes: '#D97706' // Professional amber
   },
   
-  // Tags colors - Dark grey for professional look
+  // Tags colors - Subtle professional palette
   tags: {
-    mit: '#374151', // Dark grey
-    ai: '#374151', // Dark grey
-    product: '#374151', // Dark grey
-    mobile: '#374151', // Dark grey
-    engineering: '#374151', // Dark grey
-    react: '#374151', // Dark grey
-    hr: '#374151', // Dark grey
-    dataScience: '#374151', // Dark grey
-    design: '#374151', // Dark grey
-    ux: '#374151' // Dark grey
+    mit: '#2563EB', // Professional blue
+    ai: '#059669', // Professional green
+    product: '#0EA5E9', // Professional blue
+    mobile: '#D97706', // Professional amber
+    engineering: '#2563EB', // Professional blue
+    react: '#059669', // Professional green
+    hr: '#0EA5E9', // Professional blue
+    dataScience: '#2563EB', // Professional blue
+    design: '#D97706', // Professional amber
+    ux: '#2563EB' // Professional blue
   }
 };
 

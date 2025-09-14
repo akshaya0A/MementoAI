@@ -109,65 +109,53 @@ def write_embedding_doc(
     db.document(path).set(doc, merge=True)
     return path
 
+# services/nearest_neighbor.py
+from typing import Dict, List, Optional
+from google.cloud import firestore
+from .vector_store import init_vertex, _build_restricts
+
 def find_neighbors(
     query_vector: List[float],
-    *,
     num_neighbors: int = 10,
     filters: Optional[Dict] = None,
     uid: Optional[str] = None
 ) -> List[Dict]:
     """
-    Query Vertex for nearest neighbors.
-    Returns: [{ "vectorId": str, "distance": float }]
+    Compatible with google-cloud-aiplatform==1.113.0.
+    Uses the "simple" signature: queries = [list_of_floats], num_neighbors=int, restricts=[dicts...]
     """
-    ep, deployed_id = init_vertex()
-    rs = _restricts(filters or {})
-    if uid:
-        rs.append({"namespace": "uid", "allow_list": [uid]})
+    try:
+        index_ep, deployed_id = init_vertex()
+        rs = _build_restricts(filters or {})
+        if uid:
+            rs.append({"namespace": "uid", "allow_list": [str(uid)]})
 
-    # Vertex Python SDK supports either a compact or full query dict; this variant is robust:
-    resp = ep.find_neighbors(
-        deployed_index_id=deployed_id,
-        queries=[{
-            "datapoint": {"feature_vector": [float(x) for x in query_vector]},
-            "neighbor_count": int(num_neighbors),
-            "restricts": rs or None
-        }]
-    )
-    out: List[Dict] = []
-    if resp and getattr(resp[0], "neighbors", None):
-        for n in resp[0].neighbors:
-            # attribute names can vary slightly by SDK version; guard both:
-            dp = getattr(n, "datapoint", None) or getattr(n, "neighbor", None)
-            vid = getattr(dp, "datapoint_id", None) if dp else None
-            if vid is None:
-                vid = getattr(n, "datapoint_id", None)
-            out.append({"vectorId": vid, "distance": float(n.distance)})
-    return out
+        # Old/simple signature: list of vectors, not nested dicts
+        resp = index_ep.find_neighbors(
+            deployed_index_id=deployed_id,
+            queries=[[float(x) for x in query_vector]],
+            num_neighbors=int(num_neighbors),
+            restricts=rs or None,
+        )
 
-def ingest_embedding(
-    db: firestore.Client,
-    uid: str,
-    session_id: str,
-    vector: List[float],
-    meta: Optional[Dict] = None,
-) -> Tuple[str, str]:
-    """
-    Orchestrates: upsert to Vertex + write /embeddings/{vectorId}.
-    Returns (vector_id, embedding_doc_path).
-    """
-    meta = dict(meta or {})
-    vector_id = upsert_to_vertex(uid, session_id, vector, meta)
-    emb_path = write_embedding_doc(
-        db,
-        vector_id=vector_id,
-        uid=uid,
-        tenant_id=meta.get("tenantId"),
-        encounter_path=None,             # caller can fill later if known
-        model=str(meta.get("model", "face-128@v1")),
-        modality=str(meta.get("modality", "face")),
-        dim=int(meta.get("dim", 128)),
-        precision=str(meta.get("precision", "int")),
-        person_id=meta.get("personId"),
-    )
-    return vector_id, emb_path
+        out: List[Dict] = []
+        if resp and len(resp) > 0:
+            first = resp[0]
+            # Handle both shapes across minor versions
+            # 1) iterable of neighbor-like with .datapoint_id / .distance
+            # 2) object with .neighbors list of items above
+            neighbors = getattr(first, "neighbors", first)
+            for n in neighbors:
+                # Try a few attribute names defensively
+                vid = getattr(getattr(n, "datapoint", None), "datapoint_id", None)
+                if not vid:
+                    vid = getattr(n, "datapoint_id", None) or getattr(n, "id", None)
+                dist = getattr(n, "distance", None)
+                if vid is None or dist is None:
+                    continue
+                out.append({"vectorId": vid, "distance": float(dist), "metadata": {}})
+        return out
+    except Exception as e:
+        print(f"[find_nearest_neighbors] ERROR: {e}")
+        return []
+

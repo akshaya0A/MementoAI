@@ -1,9 +1,11 @@
 import { ContactCard } from '@/components/ContactCard';
 import { ContactForm } from '@/components/ContactForm';
+import { DesktopLayout } from '@/components/DesktopLayout';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '@/constants/mementoTheme';
 import { useFirebaseContacts } from '@/hooks/useFirebaseContacts';
 import { Contact } from '@/types/contact';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +22,27 @@ export default function ContactsScreen() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [showAddContact, setShowAddContact] = useState(false);
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'contacts' | 'search' | 'export'>('contacts');
+  const router = useRouter();
+
+  const handlePageChange = (page: string) => {
+    setCurrentPage(page as any);
+    // Navigate to the appropriate page
+    switch (page) {
+      case 'dashboard':
+        router.push('/(tabs)/');
+        break;
+      case 'contacts':
+        router.push('/(tabs)/contacts');
+        break;
+      case 'search':
+        router.push('/(tabs)/search');
+        break;
+      case 'export':
+        router.push('/(tabs)/export');
+        break;
+    }
+  };
 
   // Filter and sort contacts
   const filteredContacts = contacts
@@ -130,136 +153,48 @@ export default function ContactsScreen() {
     );
   }
 
+  const headerActions = (
+    <View style={styles.actionButtons}>
+      <TouchableOpacity 
+        style={[styles.viewModeButton, viewMode === 'list' && styles.viewModeButtonActive]} 
+        onPress={() => setViewMode('list')}
+      >
+        <IconSymbol 
+          name="list.bullet" 
+          size={16} 
+          color={viewMode === 'list' ? MementoColors.primary : MementoColors.text.secondary} 
+        />
+      </TouchableOpacity>
+      
+      <TouchableOpacity 
+        style={[styles.viewModeButton, viewMode === 'grid' && styles.viewModeButtonActive]} 
+        onPress={() => setViewMode('grid')}
+      >
+        <IconSymbol 
+          name="grid" 
+          size={16} 
+          color={viewMode === 'grid' ? MementoColors.primary : MementoColors.text.secondary} 
+        />
+      </TouchableOpacity>
+      
+      <TouchableOpacity 
+        style={styles.addContactButton}
+        onPress={() => setShowAddContact(true)}
+      >
+        <IconSymbol name="plus" size={16} color={MementoColors.text.white} />
+        <Text style={styles.addContactButtonText}>Add Contact</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.logoContainer}>
-            <Text style={styles.logo}>M</Text>
-          </View>
-          <Text style={styles.title}>MementoAI</Text>
-        </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.headerButton}>
-            <Text style={styles.headerButtonText}>⚙️</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerButton}>
-            <Text style={styles.headerButtonText}>👤</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Enhanced Page Header */}
-      <View style={styles.pageHeader}>
-        <View style={styles.pageHeaderTop}>
-          <View style={styles.pageTitleContainer}>
-            <Text style={styles.pageTitle}>All Contacts</Text>
-            <Text style={styles.pageSubtitle}>{filteredContacts.length} of {contacts.length} contacts in your network</Text>
-          </View>
-          
-          <View style={styles.pageActions}>
-            <TouchableOpacity 
-              style={[styles.viewModeButton, viewMode === 'list' && styles.viewModeButtonActive]} 
-              onPress={() => setViewMode('list')}
-            >
-              <IconSymbol 
-                name="list.bullet" 
-                size={16} 
-                color={viewMode === 'list' ? MementoColors.primary : MementoColors.text.secondary} 
-              />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.viewModeButton, viewMode === 'grid' && styles.viewModeButtonActive]} 
-              onPress={() => setViewMode('grid')}
-            >
-              <IconSymbol 
-                name="grid" 
-                size={16} 
-                color={viewMode === 'grid' ? MementoColors.primary : MementoColors.text.secondary} 
-              />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.addContactButton}
-              onPress={() => setShowAddContact(true)}
-            >
-              <IconSymbol name="plus" size={16} color={MementoColors.text.white} />
-              <Text style={styles.addContactButtonText}>Add Contact</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Enhanced Search */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchInputContainer}>
-            <IconSymbol name="magnifyingglass" size={16} color={MementoColors.text.muted} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search contacts, companies, roles..."
-              placeholderTextColor={MementoColors.text.muted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <IconSymbol name="xmark.circle.fill" size={16} color={MementoColors.text.muted} />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </View>
-
-      {/* Sort and Filter Controls */}
-      <View style={styles.searchAndControls}>
-
-        {/* Sort and View Controls */}
-        <View style={styles.controlsRow}>
-          <TouchableOpacity 
-            style={styles.sortButton}
-            onPress={() => {
-              const sortOptions: SortBy[] = ['name', 'company', 'date'];
-              const currentIndex = sortOptions.indexOf(sortBy);
-              const nextIndex = (currentIndex + 1) % sortOptions.length;
-              setSortBy(sortOptions[nextIndex]);
-            }}
-          >
-            <IconSymbol name="arrow.up.arrow.down" size={16} color={MementoColors.text.secondary} />
-            <Text style={styles.sortButtonText}>
-              {sortBy.charAt(0).toUpperCase() + sortBy.slice(1)}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.sortOrderButton}
-            onPress={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-          >
-            <IconSymbol 
-              name={sortOrder === 'asc' ? "chevron.up" : "chevron.down"} 
-              size={16} 
-              color={MementoColors.text.secondary} 
-            />
-          </TouchableOpacity>
-
-          <View style={styles.viewToggle}>
-            <TouchableOpacity
-              style={[styles.viewButton, viewMode === 'grid' && styles.viewButtonActive]}
-              onPress={() => setViewMode('grid')}
-            >
-              <IconSymbol name="square.grid.2x2" size={16} color={MementoColors.text.secondary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.viewButton, viewMode === 'list' && styles.viewButtonActive]}
-              onPress={() => setViewMode('list')}
-            >
-              <IconSymbol name="list.bullet" size={16} color={MementoColors.text.secondary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
-      {/* Results */}
+    <DesktopLayout
+      currentPage={currentPage}
+      onPageChange={handlePageChange}
+      title="All Contacts"
+      subtitle={`${filteredContacts.length} of ${contacts.length} contacts in your network`}
+      headerActions={headerActions}
+    >
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.resultsContainer}>
           {filteredContacts.length === 0 ? (
@@ -310,11 +245,6 @@ export default function ContactsScreen() {
         </View>
       </ScrollView>
 
-      {/* Add Contact Button */}
-      <TouchableOpacity style={styles.fab} onPress={handleAddContact}>
-        <IconSymbol name="plus" size={24} color={MementoColors.text.white} />
-      </TouchableOpacity>
-
       {/* Contact Form Modals */}
       {showAddContact && (
         <ContactForm
@@ -330,7 +260,7 @@ export default function ContactsScreen() {
           onCancel={() => setEditingContact(null)}
         />
       )}
-    </SafeAreaView>
+    </DesktopLayout>
   );
 }
 
