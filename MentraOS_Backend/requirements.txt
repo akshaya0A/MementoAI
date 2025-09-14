@@ -1,6 +1,10 @@
-flask==3.0.0
-firebase-admin==6.4.0
-google-cloud-storage==2.10.0
-google-cloud-aiplatform==1.38.0
-google-cloud-firestore==2.13.1
-gunicorn==21.2.0
+google-cloud-aiplatform>=1.115.0,<2.0.0
+proto-plus>=1.25.0
+protobuf>=4.25.3,<5.0.0
+google-api-core>=2.19.0
+grpcio>=1.62.0
+google-cloud-firestore>=2.16.0
+google-cloud-storage>=2.18.0
+Flask>=3.0.0
+firebase-admin>=6.4.0
+gunicorn>=21.2.0

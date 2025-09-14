@@ -1,0 +1,16 @@
+{
+  "contentsDeltaUri": "gs://mementoai.firebasestorage.app/vertex_ai_index/",
+  "config": {
+    "dimensions": 128,
+    "approximateNeighborsCount": 150,
+    "distanceMeasureType": "COSINE_DISTANCE",
+    "featureNormType": "UNIT_L2_NORM",
+    "algorithmConfig": {
+      "treeAhConfig": {
+        "leafNodeEmbeddingCount": 10000,
+        "leafNodesToSearchPercent": 2
+      }
+    },
+    "shardSize": "SHARD_SIZE_SMALL"
+  }
+}

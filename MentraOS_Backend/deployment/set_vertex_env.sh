@@ -6,15 +6,15 @@
 export GCP_PROJECT="mementoai"
 export GCP_LOCATION="us-central1"
 export INDEX_ENDPOINT="projects/528890859039/locations/us-central1/indexEndpoints/4118983862904684544"
-export DEPLOYED_INDEX_ID="faces_prod_128"
+export DEPLOYED_INDEX_ID="faces_streaming_v2"
 
 # Also set the standard environment variables
 export GOOGLE_CLOUD_PROJECT="mementoai"
 export LOCATION="us-central1"
 export PROJECT_ID="mementoai"
 
-# Index and endpoint IDs for reference
-export INDEX_ID="6818082598955253760"
+# Index and endpoint IDs for reference (updated for streaming index)
+export INDEX_ID="7462097345669234688"
 export ENDPOINT_ID="4118983862904684544"
 
 # Firebase/Firestore configuration
