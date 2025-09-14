@@ -13,7 +13,7 @@ type SortOrder = 'asc' | 'desc';
 type ViewMode = 'list' | 'grid';
 
 export default function SearchScreen() {
-  const { contacts, loading, error } = useFirebaseContacts();
+  const { contacts, loading, error, updateContact } = useFirebaseContacts();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<string>('all');
   const [selectedTag, setSelectedTag] = useState<string>('all');
@@ -119,6 +119,30 @@ export default function SearchScreen() {
 
   const handleViewContactDetail = (contact: Contact) => {
     router.push(`/contact-detail?contactId=${contact.id}`);
+  };
+
+  const handleDeepResearchToggle = async (contactId: string, enabled: boolean) => {
+    try {
+      // Update the contact in Firebase with the new deep research state
+      const contactToUpdate = contacts.find(c => c.id === contactId);
+      if (contactToUpdate) {
+        const updates = {
+          deepResearchEnabled: enabled,
+          updatedAt: new Date()
+        };
+        await updateContact(contactId, updates);
+        
+        // TODO: Replace with actual API call when backend is ready
+        if (enabled) {
+          console.log(`Deep research enabled for contact: ${contactToUpdate.name} (${contactId})`);
+          // await deepResearchAPI(contactId);
+        } else {
+          console.log(`Deep research disabled for contact: ${contactToUpdate.name} (${contactId})`);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update deep research state:', error);
+    }
   };
 
   // Show loading state
@@ -367,6 +391,7 @@ export default function SearchScreen() {
                   contact={contact}
                   onPress={() => handleViewContactDetail(contact)}
                   onViewDetail={handleViewContactDetail}
+                  onDeepResearchToggle={handleDeepResearchToggle}
                 />
               ))}
             </View>

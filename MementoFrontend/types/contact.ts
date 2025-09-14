@@ -11,6 +11,7 @@ export interface Contact {
   instagramUrl?: string;
   websiteUrl?: string;
   deepResearchArea?: string; // Deep research area for description
+  deepResearchEnabled?: boolean; // Whether deep research is enabled for this contact
   socialMedia: {
     platform: string;
     url: string;

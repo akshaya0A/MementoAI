@@ -49,6 +49,31 @@ export default function ContactsScreen() {
     router.push(`/contact-detail?contactId=${contact.id}`);
   };
 
+  const handleDeepResearchToggle = async (contactId: string, enabled: boolean) => {
+    try {
+      // Update the contact in Firebase with the new deep research state
+      const contactToUpdate = contacts.find(c => c.id === contactId);
+      if (contactToUpdate) {
+        const updates = {
+          deepResearchEnabled: enabled,
+          updatedAt: new Date()
+        };
+        await updateContact(contactId, updates);
+        
+        // TODO: Replace with actual API call when backend is ready
+        if (enabled) {
+          console.log(`Deep research enabled for contact: ${contactToUpdate.name} (${contactId})`);
+          // await deepResearchAPI(contactId);
+        } else {
+          console.log(`Deep research disabled for contact: ${contactToUpdate.name} (${contactId})`);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update deep research state:', error);
+      Alert.alert('Error', 'Failed to update deep research setting. Please try again.');
+    }
+  };
+
   // Filter and sort contacts
   const filteredContacts = contacts
     .filter(contact => {
@@ -286,6 +311,7 @@ export default function ContactsScreen() {
                     onEdit={() => handleEditContact(contact)}
                     onDelete={() => handleDeleteContact(contact.id)}
                     onViewDetail={handleViewContactDetail}
+                    onDeepResearchToggle={handleDeepResearchToggle}
                   />
                 ))}
               </View>

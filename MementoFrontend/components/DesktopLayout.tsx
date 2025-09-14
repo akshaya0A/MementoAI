@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, TextInput } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, TextInput, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing, MementoShadows } from '../constants/mementoTheme';
 import { IconSymbol } from './ui/icon-symbol';
@@ -39,7 +39,11 @@ export function DesktopLayout({
       <View style={styles.sidebar}>
         <View style={styles.sidebarHeader}>
           <View style={styles.logoContainer}>
-            <Text style={styles.logo}>M</Text>
+            <Image 
+              source={require('@/assets/images/LogoMomento.jpg')} 
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           <Text style={styles.sidebarTitle}>MementoAI</Text>
         </View>
@@ -76,7 +80,11 @@ export function DesktopLayout({
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <View style={styles.logoContainer}>
-              <Text style={styles.logo}>M</Text>
+              <Image 
+                source={require('@/assets/images/LogoMomento.jpg')} 
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.headerTitle}>MementoAI</Text>
           </View>
@@ -142,15 +150,15 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: MementoBorderRadius.md,
-    backgroundColor: MementoColors.primary,
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: MementoSpacing.md,
   },
-  logo: {
-    fontSize: MementoFontSizes.md,
-    fontWeight: 'bold',
-    color: MementoColors.text.white,
+  logoImage: {
+    width: 32,
+    height: 32,
+    borderRadius: MementoBorderRadius.md,
   },
   sidebarTitle: {
     fontSize: MementoFontSizes.lg,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, Image } from 'react-native';
 import { MementoBorderRadius, MementoColors, MementoFontSizes } from '@/constants/mementoTheme';
 
 interface CustomLogoProps {
@@ -11,7 +11,11 @@ export function CustomLogo({ size = 40, showText = true }: CustomLogoProps) {
   return (
     <View style={styles.container}>
       <View style={[styles.logoContainer, { width: size, height: size }]}>
-        <Text style={[styles.logo, { fontSize: size * 0.5 }]}>M</Text>
+        <Image 
+          source={require('@/assets/images/LogoMomento.jpg')} 
+          style={[styles.logoImage, { width: size, height: size }]}
+          resizeMode="contain"
+        />
       </View>
       {showText && (
         <Text style={styles.text}>MementoAI</Text>
@@ -27,14 +31,13 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     borderRadius: MementoBorderRadius.md,
-    backgroundColor: MementoColors.primary,
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
   },
-  logo: {
-    fontWeight: 'bold',
-    color: MementoColors.text.white,
+  logoImage: {
+    borderRadius: MementoBorderRadius.md,
   },
   text: {
     fontSize: MementoFontSizes.lg,

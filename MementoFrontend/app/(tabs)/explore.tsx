@@ -2,7 +2,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing } from '@/constants/mementoTheme';
 import { useFirebaseContacts } from '@/hooks/useFirebaseContacts';
 import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ExploreScreen() {
@@ -74,7 +74,11 @@ export default function ExploreScreen() {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <View style={styles.logoContainer}>
-              <Text style={styles.logo}>M</Text>
+              <Image 
+                source={require('@/assets/images/LogoMomento.jpg')} 
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.title}>MementoAI</Text>
           </View>
@@ -211,15 +215,15 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: MementoBorderRadius.md,
-    backgroundColor: MementoColors.primary,
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: MementoSpacing.sm,
   },
-  logo: {
-    fontSize: MementoFontSizes.lg,
-    fontWeight: 'bold',
-    color: MementoColors.text.white,
+  logoImage: {
+    width: 32,
+    height: 32,
+    borderRadius: MementoBorderRadius.md,
   },
   title: {
     fontSize: MementoFontSizes.lg,

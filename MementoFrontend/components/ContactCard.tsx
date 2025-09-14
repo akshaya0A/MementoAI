@@ -1,5 +1,5 @@
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View, Switch } from 'react-native';
 import { Contact } from '@/types/contact';
 import { MementoBorderRadius, MementoColors, MementoFontSizes, MementoSpacing, MementoShadows } from '@/constants/mementoTheme';
 import { IconSymbol } from './ui/icon-symbol';
@@ -11,6 +11,7 @@ interface ContactCardProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onViewDetail?: (contact: Contact) => void;
+  onDeepResearchToggle?: (contactId: string, enabled: boolean) => void;
   showEncounterCount?: boolean;
   showRecentEncounter?: boolean;
 }
@@ -21,9 +22,11 @@ export function ContactCard({
   onEdit, 
   onDelete, 
   onViewDetail,
+  onDeepResearchToggle,
   showEncounterCount = false,
   showRecentEncounter = false 
 }: ContactCardProps) {
+  const [isDeepResearchEnabled, setIsDeepResearchEnabled] = useState(contact.deepResearchEnabled || false);
   const latestEncounter = contact.encounters.length > 0 
     ? contact.encounters.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
     : null;
@@ -61,6 +64,28 @@ export function ContactCard({
   };
 
   const tags = generateTags();
+
+  const handleDeepResearchToggle = async (value: boolean) => {
+    setIsDeepResearchEnabled(value);
+    
+    // Call the parent component's handler if provided
+    if (onDeepResearchToggle) {
+      onDeepResearchToggle(contact.id, value);
+    }
+    
+    // TODO: Replace with actual API call when backend is ready
+    if (value) {
+      try {
+        // Placeholder API call for deep research
+        console.log(`Starting deep research for contact: ${contact.name} (${contact.id})`);
+        // await deepResearchAPI(contact.id);
+      } catch (error) {
+        console.error('Deep research API call failed:', error);
+        // Revert the toggle if API call fails
+        setIsDeepResearchEnabled(false);
+      }
+    }
+  };
 
   const handlePress = () => {
     if (onViewDetail) {
@@ -179,6 +204,17 @@ export function ContactCard({
 
         {/* Action Buttons */}
         <View style={styles.actions}>
+          {/* Deep Research Switch */}
+          <Switch
+            value={isDeepResearchEnabled}
+            onValueChange={handleDeepResearchToggle}
+            trackColor={{ 
+              false: MementoColors.borderMedium, 
+              true: MementoColors.primary 
+            }}
+            thumbColor={isDeepResearchEnabled ? MementoColors.text.white : MementoColors.text.muted}
+          />
+          
           {onEdit && (
             <TouchableOpacity onPress={onEdit} style={styles.actionButton}>
               <IconSymbol name="pencil" size={16} color={MementoColors.text.secondary} />
