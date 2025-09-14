@@ -440,12 +440,10 @@ def bulk_upsert_embeddings():
     payload = request.get_json(force=True, silent=True) or {}
     uid = payload.get("uid")
     session_id = payload.get("sessionId") or f"bulk_{int(time.time()*1000)}"
-    store_vector = bool(payload.get("storeVector", False))
 
     if not uid:
         return jsonify({"error": "uid is required"}), 400
 
-    # Accept either `vectors` (list[list[128]]) or `items` (list[dict])
     vectors = payload.get("vectors")
     items = payload.get("items")
     default_model = payload.get("model") or "face-128@v1"
@@ -474,123 +472,88 @@ def bulk_upsert_embeddings():
                 "meta": {}
             })
     else:
-        return jsonify({"error": "Provide either `vectors` (list) or `items` (list)"}), 400
+        return jsonify({"error": "Provide either `vectors` or `items`"}), 400
 
     db, _, _ = get_firebase_clients()
-
-    try:
-        init_vertex()
-    except Exception as e:
-        return jsonify({"error": f"Vertex init failed: {e}"}), 500
+    init_vertex()
 
     vector_ids = []
     for entry in to_process:
         vec = entry["vector"]
         meta = {"uid": uid, "modality": entry["modality"], "model": entry["model"], **(entry["meta"] or {})}
+
         try:
             vector_id = upsert_to_vertex(uid, session_id, vec, meta)
             vector_ids.append(vector_id)
 
-            # Minimal pointer doc
-            write_embedding_doc(
-                db,
-                vector_id=vector_id,
-                uid=uid,
-                tenant_id=None,
-                encounter_path=None,
-                model=entry["model"],
-                modality=entry["modality"],
-                dim=128,
-                precision="int"  # or "float" depending on your pipeline
-            )
-
-            # Optionally persist raw vector so GET can return it
-            if store_vector:
-                db.document(f"embeddings/{vector_id}").set({
-                    "vector": vec,
-                    "storedVector": True,
-                    "updatedAt": firestore.SERVER_TIMESTAMP
-                }, merge=True)
+            # Always write full vector to Firestore
+            db.document(f"embeddings/{vector_id}").set({
+                "uid": uid,
+                "sessionId": session_id,
+                "vector": vec,
+                "model": entry["model"],
+                "modality": entry["modality"],
+                "dim": 128,
+                "precision": "int",
+                "meta": meta,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+                "createdAt": firestore.SERVER_TIMESTAMP,
+            }, merge=True)
 
         except Exception as e:
-            return jsonify({"error": f"Upsert failed for one vector: {e}"}), 500
+            return jsonify({"error": f"Upsert failed: {e}"}), 500
 
     return jsonify({"ok": True, "count": len(vector_ids), "vectorIds": vector_ids}), 200
+
 
 # ---------- List embedding metadata (optionally include stored vectors) ----------
 # GET /embeddings?uid=...&limit=100&includeVector=true&pageToken=embeddings%2FABC123
 @app.route("/embeddings", methods=["GET"])
 def list_embeddings():
     uid = request.args.get("uid")
-    include_vector = request.args.get("includeVector", "false").lower() == "true"
     try:
         limit = int(request.args.get("limit", 100))
     except ValueError:
         limit = 100
     limit = max(1, min(1000, limit))
-    page_token = request.args.get("pageToken")  # expects a doc path or doc id
+
+    page_token = request.args.get("pageToken")
 
     db, _, _ = get_firebase_clients()
-
     coll = db.collection("embeddings")
 
-    # Basic filtering
-    if uid:
-        q = coll.where("uid", "==", uid)
-    else:
-        q = coll
-
-    # Ordering for stable pagination. Prefer createdAt; fall back to __name__
-    # Not all docs may have createdAt; write_embedding_doc uses SERVER_TIMESTAMP
-    # Use __name__ to keep it robust.
+    q = coll.where("uid", "==", uid) if uid else coll
     q = q.order_by("__name__").limit(limit)
 
-    # Pagination
     if page_token:
-        try:
-            # Allow either raw ID or full path
-            if "/" in page_token:
-                start_doc = db.document(page_token).get()
-            else:
-                start_doc = db.document(f"embeddings/{page_token}").get()
-            if start_doc.exists:
-                q = q.start_after(start_doc)
-        except Exception:
-            pass
+        start_doc = db.document(f"embeddings/{page_token}" if "/" not in page_token else page_token).get()
+        if start_doc.exists:
+            q = q.start_after(start_doc)
 
     snaps = q.stream()
     items = []
     last_doc_id = None
 
-    def _ts_to_iso(ts):
-        try:
-            # Firestore timestamp to ISO 8601 Z
-            return ts.to_datetime().astimezone(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-        except Exception:
-            return None
-
     for s in snaps:
         d = s.to_dict() or {}
-        row = {
+        items.append({
             "vectorId": s.id,
             "uid": d.get("uid"),
+            "sessionId": d.get("sessionId"),
+            "vector": d.get("vector"),        # <-- always included
             "model": d.get("model"),
             "modality": d.get("modality"),
             "dim": d.get("dim"),
             "precision": d.get("precision"),
+            "meta": d.get("meta"),
             "personId": d.get("personId"),
             "encounterPath": d.get("encounterPath"),
-            "createdAt": _ts_to_iso(d.get("createdAt")) if d.get("createdAt") else None,
-            "updatedAt": _ts_to_iso(d.get("updatedAt")) if d.get("updatedAt") else None,
-        }
-        if include_vector and d.get("storedVector"):
-            # Only return if you chose to store it
-            row["vector"] = d.get("vector")
-        items.append(row)
+            "createdAt": d.get("createdAt"),
+            "updatedAt": d.get("updatedAt"),
+        })
         last_doc_id = s.id
 
     next_token = f"embeddings/{last_doc_id}" if last_doc_id and len(items) == limit else None
-
     return jsonify({"items": items, "nextPageToken": next_token}), 200
 
 
