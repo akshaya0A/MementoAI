@@ -1,9 +1,14 @@
 import asyncio
+import os
 from dedalus_labs import AsyncDedalus, DedalusRunner
 from dotenv import load_dotenv
 from dedalus_labs.utils.streaming import stream_async
 
 load_dotenv()
+
+dedalus_key = os.getenv('DEDALUS_API_KEY')
+anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+serpapi_key = os.getenv('SERPAPI_KEY')
 
 def get_person_info():
     """Get person's information from user input"""

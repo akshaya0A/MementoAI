@@ -1,9 +1,14 @@
 import asyncio
+import os
 from dedalus_labs import AsyncDedalus, DedalusRunner
 from dotenv import load_dotenv
 from dedalus_labs.utils.streaming import stream_async
 
 load_dotenv()
+
+dedalus_key = os.getenv('DEDALUS_API_KEY')
+anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+serpapi_key = os.getenv('SERPAPI_KEY')
 
 async def research_person_demo(first_name, last_name, school="", location="", additional_info=""):
     """Demo function to research information about a specific person"""

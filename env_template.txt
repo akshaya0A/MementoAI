@@ -1,6 +1,12 @@
 # Dedalus Labs API Configuration
 DEDALUS_API_KEY=your_dedalus_api_key_here
 
+# Anthropic API Configuration
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+
+# SerpAPI Configuration (for web search)
+SERPAPI_KEY=your_serpapi_key_here
+
 # OpenAI API Configuration (if using OpenAI models)
 OPENAI_API_KEY=your_openai_api_key_here
 

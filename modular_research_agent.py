@@ -3,6 +3,7 @@ import json
 import re
 import time
 import random
+import os
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
@@ -20,6 +21,10 @@ from dedalus_labs import AsyncDedalus, DedalusRunner
 from dotenv import load_dotenv
 
 load_dotenv()
+
+dedalus_key = os.getenv('DEDALUS_API_KEY')
+anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+serpapi_key = os.getenv('SERPAPI_KEY')
 
 @dataclass
 class Source:
