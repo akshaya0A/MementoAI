@@ -1,3 +1,9 @@
 dedalus-labs
 python-dotenv
 asyncio
+requests
+urllib3
+beautifulsoup4
+selenium
+lxml
+html5lib
