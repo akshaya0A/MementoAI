@@ -4,6 +4,10 @@ from flask import Flask, request, jsonify
 import firebase_admin
 from firebase_admin import firestore, storage as fa_storage
 from google.cloud import storage as gcs
+from services.vector_store import ingest_embedding, init_vertex
+from services.nearest_neighbor import find_nearest_neighbors, find_similar_faces
+
+
 
 # ---- Init Flask first ----
 app = Flask(__name__)
@@ -128,68 +132,218 @@ def ingest_array():
 
 # ---------- Audio ingestion for Meta glasses ----------
 # Request JSON: { uid, sessionId, timestamp, transcript?, skills?, location, nextSteps?, confidence?, summary, contactInfo? }
-# Response JSON: { ok, itemId }
 @app.route("/ingestAudio", methods=["POST"])
-def ingest_audio():
+def ingest_array():
     data = request.get_json(force=True, silent=True) or {}
-    uid = data.get("uid")
+    uid        = data.get("uid")
     session_id = data.get("sessionId")
-    timestamp = data.get("timestamp")  # Required
-    location = data.get("location")    # Required
-    summary = data.get("summary")      # Required
+    item_type  = data.get("itemType", "embedding")
+    vector     = data.get("vector")
+    meta       = data.get("meta", {})
+    name       = data.get("name")  # Optional name parameter
     
-    # Optional fields
-    transcript = data.get("transcript")
-    skills = data.get("skills")
-    next_steps = data.get("nextSteps")
-    confidence = data.get("confidence")
-    contact_info = data.get("contactInfo")
+    # Add name to meta if provided
+    if name:
+        meta["name"] = name
 
-    # Validate required fields
-    if not uid or not session_id:
-        return jsonify({"error": "uid and sessionId are required"}), 400
-    if not timestamp:
-        return jsonify({"error": "timestamp is required"}), 400
-    if not location:
-        return jsonify({"error": "location is required"}), 400
-    if not summary:
-        return jsonify({"error": "summary is required"}), 400
+    if not uid or not session_id or vector is None:
+        return jsonify({"error": "uid, sessionId, and vector are required"}), 400
+    if not isinstance(vector, list):
+        return jsonify({"error": "vector must be a list (e.g., 128/256/512 floats)"}), 400
 
-    # Validate confidence is int if provided
-    if confidence is not None and not isinstance(confidence, int):
-        return jsonify({"error": "confidence must be an integer"}), 400
+    # Optional: dimension sanity
+    dim = meta.get("dim")
+    if dim is not None and isinstance(dim, int) and dim != len(vector):
+        return jsonify({"error": f"vector dimension mismatch: got {len(vector)}, expected {dim}"}), 400
 
     # Get Firebase clients lazily
-    db, bucket, gcs_client = get_firebase_clients()
+    db, _, _ = get_firebase_clients()
     if db is None:
         return jsonify({"error": "Firebase initialization failed"}), 500
 
-    ts = int(time.time() * 1000)
-    doc = {
-        "uid": uid,
-        "sessionId": session_id,
-        "itemType": "audio_meta",
-        "timestamp": timestamp,
-        "location": location,
-        "summary": summary,
-        "createdAt": firestore.SERVER_TIMESTAMP
-    }
-    
-    # Add optional fields if provided
-    if transcript:
-        doc["transcript"] = transcript
-    if skills:
-        doc["skills"] = skills
-    if next_steps:
-        doc["nextSteps"] = next_steps
-    if confidence is not None:
-        doc["confidence"] = confidence
-    if contact_info:
-        doc["contactInfo"] = contact_info
-    
-    db.document(f"sessions/{session_id}/items/{ts}").set(doc, merge=True)
+    # Ensure Vertex client is initialized (safe to call multiple times)
+    try:
+        init_vertex()
+    except Exception as e:
+        return jsonify({"error": f"Vertex init failed: {e}"}), 500
 
-    return jsonify({"ok": True, "itemId": str(ts)}), 200
+    # Upsert to Vertex + write pointer docs
+    try:
+        vector_id, user_path = ingest_embedding(
+            db=db,
+            uid=uid,
+            session_id=session_id,
+            vector=vector,
+            meta=meta,
+            item_type=item_type
+        )
+    except Exception as e:
+        return jsonify({"error": f"ingest failed: {e}"}), 500
+
+    return jsonify({"ok": True, "vectorId": vector_id, "path": user_path}), 200
+
+# ---------- Vector Search Endpoints ----------
+# Request JSON: { queryVector: [floats], numNeighbors?: int, filters?: {...}, uid?: "..." }
+# Response JSON: { results: [{ vectorId, distance, metadata }] }
+@app.route("/search", methods=["POST"])
+def search_vectors():
+    data = request.get_json(force=True, silent=True) or {}
+    query_vector = data.get("queryVector")
+    num_neighbors = data.get("numNeighbors", 10)
+    filters = data.get("filters", {})
+    uid = data.get("uid")
+
+    if not query_vector or not isinstance(query_vector, list):
+        return jsonify({"error": "queryVector is required and must be a list of floats"}), 400
+
+    try:
+        # Initialize Vertex AI
+        init_vertex()
+        
+        # Perform the search
+        results = find_nearest_neighbors(
+            query_vector=query_vector,
+            num_neighbors=num_neighbors,
+            filters=filters,
+            uid=uid
+        )
+        
+        return jsonify({"results": results}), 200
+        
+    except Exception as e:
+        return jsonify({"error": f"Search failed: {str(e)}"}), 500
+
+# Request JSON: { queryVector: [floats], numNeighbors?: int, uid?: "...", sessionId?: "..." }
+# Response JSON: { results: [{ vectorId, distance, uid, sessionId, metadata, ... }] }
+@app.route("/searchFaces", methods=["POST"])
+def search_faces():
+    data = request.get_json(force=True, silent=True) or {}
+    query_vector = data.get("queryVector")
+    num_neighbors = data.get("numNeighbors", 10)
+    uid = data.get("uid")
+    session_id = data.get("sessionId")
+
+    if not query_vector or not isinstance(query_vector, list):
+        return jsonify({"error": "queryVector is required and must be a list of floats"}), 400
+
+    try:
+        # Get Firebase clients
+        db, _, _ = get_firebase_clients()
+        if db is None:
+            return jsonify({"error": "Firebase initialization failed"}), 500
+
+        # Initialize Vertex AI
+        init_vertex()
+        
+        # Perform the face search with Firestore enrichment
+        results = find_similar_faces(
+            db=db,
+            query_vector=query_vector,
+            num_neighbors=num_neighbors,
+            uid=uid,
+            session_id=session_id
+        )
+        
+        return jsonify({"results": results}), 200
+        
+    except Exception as e:
+        return jsonify({"error": f"Face search failed: {str(e)}"}), 500
+
+# Request JSON: { identityId: "...", numResults?: int, uid?: "..." }
+# Response JSON: { results: [{ vectorId, uid, sessionId, metadata, ... }] }
+@app.route("/searchByIdentity", methods=["POST"])
+def search_by_identity():
+    data = request.get_json(force=True, silent=True) or {}
+    identity_id = data.get("identityId")
+    num_results = data.get("numResults", 10)
+    uid = data.get("uid")
+
+    if not identity_id:
+        return jsonify({"error": "identityId is required"}), 400
+
+    try:
+        # Get Firebase clients
+        db, _, _ = get_firebase_clients()
+        if db is None:
+            return jsonify({"error": "Firebase initialization failed"}), 500
+
+        # Import the function here to avoid circular imports
+        from services.nearest_neighbor import search_by_identity
+        
+        # Search for faces by identity
+        results = search_by_identity(
+            db=db,
+            identity_id=identity_id,
+            num_neighbors=num_results,
+            uid=uid
+        )
+        
+        return jsonify({"results": results}), 200
+        
+    except Exception as e:
+        return jsonify({"error": f"Identity search failed: {str(e)}"}), 500
+
+
+# def ingest_audio():
+#     data = request.get_json(force=True, silent=True) or {}
+#     uid = data.get("uid")
+#     session_id = data.get("sessionId")
+#     timestamp = data.get("timestamp")  # Required
+#     location = data.get("location")    # Required
+#     summary = data.get("summary")      # Required
+    
+#     # Optional fields
+#     transcript = data.get("transcript")
+#     skills = data.get("skills")
+#     next_steps = data.get("nextSteps")
+#     confidence = data.get("confidence")
+#     contact_info = data.get("contactInfo")
+
+#     # Validate required fields
+#     if not uid or not session_id:
+#         return jsonify({"error": "uid and sessionId are required"}), 400
+#     if not timestamp:
+#         return jsonify({"error": "timestamp is required"}), 400
+#     if not location:
+#         return jsonify({"error": "location is required"}), 400
+#     if not summary:
+#         return jsonify({"error": "summary is required"}), 400
+
+#     # Validate confidence is int if provided
+#     if confidence is not None and not isinstance(confidence, int):
+#         return jsonify({"error": "confidence must be an integer"}), 400
+
+#     # Get Firebase clients lazily
+#     db, bucket, gcs_client = get_firebase_clients()
+#     if db is None:
+#         return jsonify({"error": "Firebase initialization failed"}), 500
+
+#     ts = int(time.time() * 1000)
+#     doc = {
+#         "uid": uid,
+#         "sessionId": session_id,
+#         "itemType": "audio_meta",
+#         "timestamp": timestamp,
+#         "location": location,
+#         "summary": summary,
+#         "createdAt": firestore.SERVER_TIMESTAMP
+#     }
+    
+#     # Add optional fields if provided
+#     if transcript:
+#         doc["transcript"] = transcript
+#     if skills:
+#         doc["skills"] = skills
+#     if next_steps:
+#         doc["nextSteps"] = next_steps
+#     if confidence is not None:
+#         doc["confidence"] = confidence
+#     if contact_info:
+#         doc["contactInfo"] = contact_info
+    
+#     db.document(f"sessions/{session_id}/items/{ts}").set(doc, merge=True)
+
+#     return jsonify({"ok": True, "itemId": str(ts)}), 200
 
 # ---------- (Optional) Direct multipart ingest (if you want to proxy file uploads) ----------
 # Glasses POST multipart: fields(uid, sessionId, itemType) + file=@/path/to/file

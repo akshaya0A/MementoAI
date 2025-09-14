@@ -1,0 +1,15 @@
+{
+  "config": {
+    "dimensions": 512,
+    "distanceMeasureType": "COSINE_DISTANCE",
+    "featureNormType": "UNIT_L2_NORM",
+    "approximateNeighborsCount": 150,
+    "algorithmConfig": { 
+      "treeAhConfig": { 
+        "leafNodeEmbeddingCount": 10000, 
+        "leafNodesToSearchPercent": 2 
+      } 
+    },
+    "shardSize": "SHARD_SIZE_SMALL"
+  }
+}

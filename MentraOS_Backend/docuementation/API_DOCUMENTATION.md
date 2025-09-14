@@ -118,7 +118,176 @@ curl -X POST https://mementoai-backend-528890859039.us-central1.run.app/ingestAr
 
 ---
 
-### 4. Audio Ingestion for Meta Glasses
+### 4. Ingest Embeddings to Vertex AI Vector Search
+**POST** `/ingestEmbedding`
+
+**Description**: Store face embeddings and other vectors in Vertex AI Vector Search for similarity search.
+
+**Request Body**:
+```json
+{
+  "uid": "user123",
+  "sessionId": "session456",
+  "itemType": "embedding",
+  "vector": [0.1, 0.2, 0.3, ...], // 512-dimensional face embedding
+  "meta": {
+    "model": "face-recognition-v1",
+    "modality": "face",
+    "identityId": "person_abc123",
+    "quality": 0.95
+  },
+  "name": "John Doe" // Optional name parameter
+}
+```
+
+**Parameters**:
+- `uid` (required): User identifier
+- `sessionId` (required): Session identifier
+- `vector` (required): Embedding vector (512 floats for face embeddings)
+- `itemType` (optional): Type of embedding (default: "embedding")
+- `meta` (optional): Metadata including model, modality, identityId, quality
+- `name` (optional): Human-readable name for the embedding
+
+**Response**:
+```json
+{
+  "ok": true,
+  "vectorId": "vec_user123_session456_a1b2c3d4",
+  "path": "users/user123/embeddings/vec_user123_session456_a1b2c3d4"
+}
+```
+
+**Example cURL**:
+```bash
+curl -X POST https://mementoai-backend-528890859039.us-central1.run.app/ingestEmbedding \
+  -H "Content-Type: application/json" \
+  -d '{
+    "uid": "user123",
+    "sessionId": "session456",
+    "vector": [0.1, 0.2, 0.3, ...],
+    "meta": {
+      "modality": "face",
+      "identityId": "person_001",
+      "quality": 0.92
+    },
+    "name": "John Doe"
+  }'
+```
+
+---
+
+### 5. Vector Similarity Search
+**POST** `/search`
+
+**Description**: Find similar vectors using Vertex AI Vector Search.
+
+**Request Body**:
+```json
+{
+  "queryVector": [0.1, 0.2, 0.3, ...], // 512-dimensional query vector
+  "numNeighbors": 10,
+  "filters": {
+    "modality": "face",
+    "model": "face-recognition-v1"
+  },
+  "uid": "user123" // Optional: filter by user
+}
+```
+
+**Response**:
+```json
+{
+  "results": [
+    {
+      "vector_id": "vec_user123_session456_a1b2c3d4",
+      "distance": 0.15,
+      "metadata": {
+        "modality": "face",
+        "model": "face-recognition-v1"
+      }
+    }
+  ]
+}
+```
+
+---
+
+### 6. Face Similarity Search with Metadata
+**POST** `/searchFaces`
+
+**Description**: Find similar face embeddings with enriched Firestore metadata.
+
+**Request Body**:
+```json
+{
+  "queryVector": [0.1, 0.2, 0.3, ...], // 512-dimensional face embedding
+  "numNeighbors": 10,
+  "uid": "user123", // Optional: filter by user
+  "sessionId": "session456" // Optional: filter by session
+}
+```
+
+**Response**:
+```json
+{
+  "results": [
+    {
+      "vector_id": "vec_user123_session456_a1b2c3d4",
+      "distance": 0.15,
+      "uid": "user123",
+      "session_id": "session456",
+      "item_type": "embedding",
+      "model": "face-recognition-v1",
+      "quality": 0.95,
+      "identity_id": "person_abc123",
+      "tenant_id": null,
+      "created_at": "2025-09-13T20:00:00Z",
+      "metadata": {
+        "name": "John Doe"
+      },
+      "firestore_path": "users/user123/embeddings/vec_user123_session456_a1b2c3d4"
+    }
+  ]
+}
+```
+
+---
+
+### 7. Search by Identity
+**POST** `/searchByIdentity`
+
+**Description**: Find all faces for a specific identity/person.
+
+**Request Body**:
+```json
+{
+  "identityId": "person_abc123",
+  "numResults": 10,
+  "uid": "user123" // Optional: filter by user
+}
+```
+
+**Response**:
+```json
+{
+  "results": [
+    {
+      "vector_id": "vec_user123_session456_a1b2c3d4",
+      "distance": 0.0,
+      "uid": "user123",
+      "session_id": "session456",
+      "identity_id": "person_abc123",
+      "metadata": {
+        "name": "John Doe"
+      }
+    }
+  ]
+}
+```
+
+---
+
+### 8. Audio Ingestion for Meta Glasses
 **POST** `/ingestAudio`
 
 **Description**: Store processed audio data from Meta glasses with structured metadata.
@@ -176,7 +345,7 @@ curl -X POST https://mementoai-backend-528890859039.us-central1.run.app/ingestAu
 
 ---
 
-### 5. Direct File Upload
+### 9. Direct File Upload
 **POST** `/ingest`
 
 **Description**: Upload files directly through multipart form data (alternative to signed URLs).
@@ -256,7 +425,42 @@ All endpoints return appropriate HTTP status codes:
 
 ### Smart Glasses Integration
 
-**1. Meta Glasses Audio Processing**:
+**1. Face Recognition Workflow**:
+```javascript
+// Step 1: Store a face embedding
+await fetch('/ingestEmbedding', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    uid: 'glasses_user_001',
+    sessionId: 'face_session_123',
+    vector: faceEmbedding, // 512-dimensional array from face recognition model
+    meta: {
+      modality: 'face',
+      identityId: 'person_john_doe',
+      quality: 0.95,
+      model: 'face-recognition-v1'
+    },
+    name: 'John Doe'
+  })
+});
+
+// Step 2: Search for similar faces
+const searchResponse = await fetch('/searchFaces', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    queryVector: newFaceEmbedding, // 512-dimensional query vector
+    numNeighbors: 5,
+    uid: 'glasses_user_001'
+  })
+});
+
+const { results } = await searchResponse.json();
+// Results contain similar faces with metadata and distances
+```
+
+**2. Meta Glasses Audio Processing**:
 ```javascript
 // Send processed audio data with metadata
 await fetch('/ingestAudio', {
@@ -373,6 +577,15 @@ For technical support or questions about integration, contact the MementoAI deve
 ---
 
 ## Changelog
+
+**v1.1.0** (2025-09-13)
+- Added Vertex AI Vector Search integration
+- New `/ingestEmbedding` endpoint for storing face embeddings
+- New `/search` endpoint for vector similarity search
+- New `/searchFaces` endpoint with Firestore metadata enrichment
+- New `/searchByIdentity` endpoint for identity-based search
+- Support for 512-dimensional face embeddings
+- Cosine distance similarity matching
 
 **v1.0.0** (2025-09-13)
 - Initial API release
