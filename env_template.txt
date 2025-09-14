@@ -18,6 +18,10 @@ OPENAI_MODEL=gpt-4
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ANTHROPIC_MODEL=claude-3-sonnet
 
+# Web Search Settings
+USE_DUCKDUCKGO=true
+USE_ANTHROPIC_AI=true
+
 # Processing Settings
 MAX_CONCURRENT_SOURCES=10
 PROCESSING_TIMEOUT=300
