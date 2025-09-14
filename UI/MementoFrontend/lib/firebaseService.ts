@@ -64,7 +64,7 @@ export const getContacts = async (userId: string): Promise<Contact[]> => {
     const q = query(
       contactsRef, 
       where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'asc')
     );
     const querySnapshot = await getDocs(q);
     

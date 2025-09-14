@@ -1,10 +1,10 @@
 export const MementoColors = {
-  // Minimal black and white color palette with subtle cyan
-  primary: '#0891B2', // Subtle professional cyan
+  // Enhanced professional color palette
+  primary: '#0891B2', // Professional cyan
   primaryLight: '#22D3EE', // Light cyan
   primaryDark: '#0E7490', // Dark cyan
-  secondary: '#0891B2', // Same as primary
-  tertiary: '#0891B2', // Same as primary
+  secondary: '#64748B', // Sophisticated slate
+  tertiary: '#8B5CF6', // Elegant purple accent
   
   // Background colors - Clean whites and greys
   background: '#FFFFFF', // Pure white
@@ -25,11 +25,11 @@ export const MementoColors = {
   borderMedium: '#D1D5DB', // Medium border
   borderDark: '#6B7280', // Dark grey border
   
-  // Status colors - Minimal and professional
-  success: '#0891B2', // Same as primary
-  warning: '#374151', // Dark grey
-  error: '#374151', // Dark grey
-  info: '#0891B2', // Same as primary
+  // Status colors - Enhanced professional palette
+  success: '#10B981', // Vibrant green
+  warning: '#F59E0B', // Warm amber
+  error: '#EF4444', // Clear red
+  info: '#0891B2', // Professional cyan
   
   // Accent colors - Minimal and professional
   accent: '#0891B2', // Subtle professional cyan
@@ -82,14 +82,15 @@ export const MementoSpacing = {
 };
 
 export const MementoFontSizes = {
-  xs: 12,
-  sm: 14,
-  base: 16,
+  xs: 11,
+  sm: 13,
+  base: 15,
   md: 16,
   lg: 18,
   xl: 20,
   xxl: 24,
-  xxxl: 32
+  xxxl: 28,
+  xxxxl: 36
 };
 
 export const MementoTypography = {
@@ -116,5 +117,53 @@ export const MementoBorderRadius = {
   md: 8,
   lg: 12,
   xl: 16,
+  xxl: 20,
   full: 999
+};
+
+export const MementoFontWeights = {
+  light: '300' as const,
+  normal: '400' as const,
+  medium: '500' as const,
+  semibold: '600' as const,
+  bold: '700' as const,
+  extrabold: '800' as const,
+  black: '900' as const,
+};
+
+export const MementoLineHeights = {
+  tight: 1.25,
+  normal: 1.5,
+  relaxed: 1.75,
+};
+
+export const MementoShadows = {
+  sm: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  md: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  lg: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  xl: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+  },
 };

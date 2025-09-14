@@ -483,7 +483,7 @@ function validateInput(input: unknown, session: AppSession): Summary {
 // ---------- Mentra app wiring ----------
 type Unsubscribe = () => void;
 
-function setupPipeline(session: AppSession) {
+function setupPipeline(session: AppSession, sessionLocation: any) {
   // --- STATE ---
   let armed = false;           // after wake phrase
   let collecting = false;      // currently recording
@@ -578,8 +578,8 @@ function setupPipeline(session: AppSession) {
         const filename = `contact-${contactName}-${today}.json`;
         const filepath = join(outputDir, filename);
         
-        // Get location using MentraOS best practices
-        const locationData = await getLocation(session);
+        // Use session-specific location
+        const locationData = sessionLocation;
         
         // Create JSON data structure
         const jsonData = {
@@ -676,7 +676,11 @@ function setupPipeline(session: AppSession) {
     if (!armed) {
       if (lower.includes((WAKE_WORD || 'start recording').toLowerCase())) {
         armed = true;
-        session.logger.info("Wake phrase detected. Starting recorder.");
+        session.logger.info("Wake phrase detected. Starting recorder and capturing photo.");
+        
+        // Capture photo when wake word is detected
+        capturePhotoOnWakeWord(session);
+        
         startCollection();
       }
       return;
@@ -691,12 +695,20 @@ function setupPipeline(session: AppSession) {
     const STOP_PHRASES = ["done", "that's it", "stop recording", "stop"];
     const hasStop = STOP_PHRASES.some((p) => lower.includes(p));
     if (hasStop && (isFinal || lower.endsWith("done") || lower.endsWith("stop"))) {
-
+      session.logger.info("🛑 Stop phrase detected - immediately stopping all recording");
+      
       // Immediately stop all recording and processing
       collecting = false;
       armed = false;
       processing = true; // Set processing flag immediately to block new events
       if (idleTimeout) { clearTimeout(idleTimeout); idleTimeout = null; }
+      
+      // Clear any pending transcription updates
+      partial = "";
+      
+      // Immediately update UI to show processing
+      session.layouts.showTextWall("🛑 Processing conversation...");
+      
       void finishNote("user-stopped");
       return;
     }
@@ -716,21 +728,19 @@ function setupPipeline(session: AppSession) {
   // ============== Voice Activity Detection ===================================
 
   const onVoiceActivity = (data: { status: boolean | "true" | "false" }) => {
-    // Ignore all VAD if we're processing
-    if (processing) {
+    // Ignore all VAD if we're processing or not collecting
+    if (processing || !collecting) {
+      session.logger.debug(`VAD ignored - processing: ${processing}, collecting: ${collecting}`);
       return;
     }
 
     const isSpeaking = data.status === true || data.status === "true";
     
     session.logger.info(`Voice Activity: ${isSpeaking ? 'Speaking' : 'Silent'}`, {
-      status: data.status
+      status: data.status,
+      processing,
+      collecting
     } as any);
-
-    // Only process VAD if we're actively collecting
-    if (!collecting) {
-      return;
-    }
 
     // Update visual indicator based on voice activity
     const live = liveNoteText();
@@ -765,67 +775,171 @@ function setupPipeline(session: AppSession) {
 // Track if greeting has been spoken to prevent duplicates
 let greetingSpoken = false;
 
-// Function to get location using MentraOS best practices
-async function getLocation(session: AppSession): Promise<any> {
-  return new Promise((resolve) => {
-    console.log('🔍 Starting location capture...');
+// Function to capture photo when wake word is detected
+async function capturePhotoOnWakeWord(session: AppSession): Promise<void> {
+  try {
+    console.log('📸 Wake word detected - capturing photo...');
+    const photo = await session.camera.requestPhoto();
+
+    console.log(`Photo captured on wake word: ${photo.filename}`);
+    console.log(`Size: ${photo.size} bytes`);
+    console.log(`Type: ${photo.mimeType}`);
+
+    // Save to file locally
+    const filename = `wake_word_photo_${Date.now()}.jpg`;
+    const outputDir = join(process.cwd(), 'output');
+    mkdirSync(outputDir, { recursive: true });
+    const filepath = join(outputDir, filename);
+    writeFileSync(filepath, photo.buffer);
+    session.logger.info(`Wake word photo saved: ${filename}`);
+
+    // Send to external API
+    await uploadPhotoToAPI(photo.buffer, photo.mimeType, session);
     
-    // Try getLatestLocation first (most efficient)
-    session.location.getLatestLocation({ accuracy: 'kilometer' })
-      .then((currentLocation) => {
-        console.log('📍 Raw location data from getLatestLocation:', currentLocation);
+    console.log('✅ Photo captured and saved on wake word');
+    
+  } catch (error) {
+    console.error('❌ Failed to capture photo on wake word:', error);
+    session.logger.error(`Wake word photo capture failed: ${(error as Error).message}`);
+  }
+}
+
+// Function to upload photo to API (shared between wake word and button press)
+async function uploadPhotoToAPI(buffer: Buffer, mimeType: string, session: AppSession): Promise<void> {
+  try {
+    console.log("Uploading photo to API...");
+    const formData = new FormData();
+    const filename = `photo_${Date.now()}.jpg`;
+    formData.append('photo', new Blob([buffer], { type: mimeType }), filename);
+    
+    const response = await fetch('http://127.0.0.1:5000/upload', { 
+      method: 'POST', 
+      body: formData 
+    });
+    
+    if (response.ok) {
+      console.log("Photo uploaded successfully");
+      session.logger.info("Photo uploaded to API successfully");
+    } else {
+      console.error(`Photo upload failed: ${response.status}`);
+      session.logger.error(`Photo upload failed: ${response.status}`);
+    }
+  } catch (error) {
+    console.error("Failed to upload photo:", error);
+    session.logger.error(`Photo upload error: ${(error as Error).message}`);
+  }
+}
+
+// Function to get location name from coordinates using AI
+async function getLocationName(latitude: number, longitude: number, session: AppSession): Promise<string> {
+  try {
+    console.log(`🗺️ Getting location name for coordinates: ${latitude}, ${longitude}`);
+    
+    const prompt = `Given the coordinates ${latitude}, ${longitude}, provide a concise, human-readable location name. This should be specific enough to identify where someone is (e.g., "Tech Conference Center, San Francisco" or "MIT Campus, Cambridge, MA" or "Downtown Seattle Convention Center"). Return only the location name, no additional text.`;
+    
+    // Try Claude first if available
+    if (anthropic) {
+      try {
+        const response = await anthropic.messages.create({
+          model: CLAUDE_MODEL || 'claude-3-5-haiku-20241022',
+          max_tokens: 100,
+          temperature: 0.1,
+          messages: [{ role: 'user', content: prompt }]
+        });
         
-        if (currentLocation && currentLocation.lat && currentLocation.lng) {
-          const locationData = {
-            latitude: currentLocation.lat,
-            longitude: currentLocation.lng,
-            accuracy: 'kilometer',
-            timestamp: new Date().toISOString()
-          };
-          console.log(`📍 Location captured: ${currentLocation.lat}, ${currentLocation.lng}`);
-          resolve(locationData);
-        } else {
-          console.warn('⚠️ getLatestLocation returned incomplete data:', currentLocation);
-          resolve(null);
-        }
-      })
-      .catch((err) => {
-        console.error('❌ getLatestLocation failed:', (err as Error).message);
-        
-        // Fallback: Try continuous stream for a few seconds
-        console.log('🔄 Trying continuous location stream as fallback...');
-        let locationReceived = false;
-        
-        const unsubscribe = session.location.subscribeToStream(
-          { accuracy: 'kilometer' },
-          (data) => {
-            if (!locationReceived && data && data.lat && data.lng) {
-              locationReceived = true;
-              console.log('📍 Location from stream:', data);
-              
-              const locationData = {
-                latitude: data.lat,
-                longitude: data.lng,
-                accuracy: 'kilometer',
-                timestamp: new Date().toISOString()
-              };
-              
-              unsubscribe(); // Stop the stream
-              resolve(locationData);
-            }
-          }
-        );
-        
-        // Timeout after 5 seconds
-        setTimeout(() => {
-          if (!locationReceived) {
-            console.warn('⏰ Location stream timeout');
-            unsubscribe();
+        const locationName = response.content[0]?.type === 'text' ? response.content[0].text.trim() : 'Unknown Location';
+        console.log(`📍 AI location name: ${locationName}`);
+        return locationName;
+      } catch (e) {
+        console.warn(`[Claude] Location name failed, trying OpenAI: ${(e as Error).message}`);
+      }
+    }
+    
+    // Fallback to OpenAI
+    if (openai) {
+      const response = await openai.chat.completions.create({
+        model: OPENAI_MODEL || 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 100,
+        temperature: 0.1
+      });
+      
+      const locationName = response.choices[0]?.message?.content?.trim() || 'Unknown Location';
+      console.log(`📍 AI location name: ${locationName}`);
+      return locationName;
+    }
+    
+    return 'Unknown Location';
+  } catch (error) {
+    console.error('❌ Failed to get location name:', (error as Error).message);
+    return 'Unknown Location';
+  }
+}
+
+
+// COMMENTED OUT: Continuous location stream approach (following MentraOS docs exactly)
+/*
+async function getContinuousLocation(session: AppSession): Promise<any> {
+  return new Promise((resolve, reject) => {
+    console.log('🔍 Starting continuous location stream...');
+    
+    let locationReceived = false;
+    const timeout = setTimeout(() => {
+      if (!locationReceived) {
+        console.error('⏰ Location stream timeout');
+        reject(new Error('Location stream timeout'));
+      }
+    }, 10000); // 10 second timeout
+    
+    const unsubscribe = session.location.subscribeToStream({
+      accuracy: 'realtime',
+      onLocationUpdate: async (location) => {
+        if (!locationReceived) {
+          locationReceived = true;
+          clearTimeout(timeout);
+          unsubscribe();
+          
+          console.log('📍 Continuous location update:', JSON.stringify(location));
+          
+          if (location && location.lat && location.lng) {
+            // Get AI-powered location name
+            const locationName = await getLocationName(location.lat, location.lng, session);
+            
+            const locationData = {
+              latitude: location.lat,
+              longitude: location.lng,
+              accuracy: location.accuracy || 'realtime',
+              timestamp: new Date().toISOString(),
+              locationName: locationName
+            };
+            
+            console.log(`📍 Continuous location captured: ${location.lat}, ${location.lng} - ${locationName}`);
+            resolve(locationData);
+          } else {
+            console.warn('⚠️ Continuous location returned incomplete data:', location);
             resolve(null);
           }
-        }, 5000);
-      });
+        }
+      }
+    });
   });
+}
+*/
+
+// Function to get placeholder location (Boston, MIT)
+async function getPlaceholderLocation(): Promise<any> {
+  console.log('📍 Using placeholder location: Boston, MIT');
+  
+  const locationData = {
+    latitude: 42.3601,
+    longitude: -71.0942,
+    accuracy: 'placeholder',
+    timestamp: new Date().toISOString(),
+    locationName: 'MIT Campus, Cambridge, MA'
+  };
+  
+  console.log(`📍 Placeholder location: ${locationData.latitude}, ${locationData.longitude} - ${locationData.locationName}`);
+  return locationData;
 }
 
 // Function to send JSON data to backend API
@@ -872,19 +986,55 @@ async function sendToBackend(jsonData: any, session: AppSession): Promise<boolea
 }
 
 async function onStart(session: AppSession) {
+  // ABSOLUTELY FIRST: Get location before ANYTHING else
+  console.log('🚀 Getting location FIRST before any other setup...');
+  let sessionLocation = null;
+  
+  try {
+    // For now, use placeholder location (Boston, MIT)
+    sessionLocation = await getPlaceholderLocation();
+    
+    // COMMENTED OUT: Real location capture
+    // sessionLocation = await getContinuousLocation(session);
+    
+    if (sessionLocation) {
+      console.log(`✅ Location captured FIRST: ${sessionLocation.latitude}, ${sessionLocation.longitude} - ${sessionLocation.locationName}`);
+    } else {
+      console.log('⚠️ Location capture failed - continuing without location');
+    }
+  } catch (locationError) {
+    console.error('❌ Location capture error:', (locationError as Error).message);
+  }
+
+  // NOW: Do all other session setup after location is captured
   session.logger.info(`[Session] Started: ${Date.now()}`);
+  
+  // Greet user with location info
+  if (sessionLocation) {
+    try {
+      await session.audio.speak(`Location captured at ${sessionLocation.locationName}. Event networking assistant ready.`);
+    } catch (e) {
+      session.logger.warn(`[Audio] Location greeting failed: ${(e as Error).message}`);
+    }
+  } else {
+    try {
+      await session.audio.speak("Event networking assistant ready. Location unavailable.");
+    } catch (e) {
+      session.logger.warn(`[Audio] Fallback greeting failed: ${(e as Error).message}`);
+    }
+  }
 
   // Greet user with wake word info (only once)
   if (!greetingSpoken) {
     try {
-      await session.audio.speak(`Event networking assistant ready. Say "${WAKE_WORD}" to start capturing conversation details.`);
+      await session.audio.speak(`Say "${WAKE_WORD}" to start capturing conversation details.`);
       greetingSpoken = true;
   } catch (e) {
     session.logger.warn(`[Audio] Greeting speak failed: ${(e as Error).message}`);
     }
   }
 
-  const pipeline = setupPipeline(session);
+  const pipeline = setupPipeline(session, sessionLocation);
 
   // Cleanup on session end
   session.on('close', async () => {
@@ -903,7 +1053,57 @@ async function onStart(session: AppSession) {
 // ---------- Custom App Server Implementation ----------
 class Server extends AppServer {
   protected async onSession(session: AppSession, sessionId: string, userId: string): Promise<void> {
+    console.log(`User ${userId} connected`);
+    
+    // Start the networking assistant functionality
     await onStart(session);
+    
+    // Subscribe to button press events for photo capture
+    const unsubscribePhoto = session.events.onButtonPress(async (data) => {
+      console.log('Button pressed - capturing photo');
+      await this.processPhoto(session);
+    });
+
+    // Add cleanup handler for photo events
+    this.addCleanupHandler(unsubscribePhoto);
+  }
+
+  // Photo processing and uploading to API (button press)
+  private async processPhoto(session: AppSession): Promise<void> {
+    try {
+      console.log('📸 Button pressed - requesting photo from smart glasses...');
+      const photo = await session.camera.requestPhoto(); // default size is medium
+
+      console.log(`Photo captured on button press: ${photo.filename}`);
+      console.log(`Size: ${photo.size} bytes`);
+      console.log(`Type: ${photo.mimeType}`);
+
+      // Convert to base64 for storage or transmission
+      const base64String = photo.buffer.toString('base64');
+      session.logger.info(`Photo as base64 (first 50 chars): ${base64String.substring(0, 50)}...`);
+
+      // Save to file locally
+      const filename = `button_photo_${Date.now()}.jpg`;
+      const outputDir = join(process.cwd(), 'output');
+      mkdirSync(outputDir, { recursive: true });
+      const filepath = join(outputDir, filename);
+      writeFileSync(filepath, photo.buffer);
+      session.logger.info(`Button photo saved: ${filename}`);
+
+      // Send to external API using shared function
+      await uploadPhotoToAPI(photo.buffer, photo.mimeType, session);
+      
+      // Notify user
+      await session.audio.speak("Photo captured and saved.");
+      
+    } catch (error) {
+      session.logger.error(`Failed to process photo: ${error}`);
+      try {
+        await session.audio.speak("Sorry, photo capture failed.");
+      } catch (audioError) {
+        session.logger.warn(`Audio feedback failed: ${(audioError as Error).message}`);
+      }
+    }
   }
 }
 

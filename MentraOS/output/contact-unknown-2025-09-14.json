@@ -1,0 +1,28 @@
+{
+  "timestamp": "2025-09-14T01:33:05.972Z",
+  "contactInfo": "<UNKNOWN>",
+  "skills": [],
+  "location": "<UNKNOWN>",
+  "nextSteps": "<UNKNOWN>",
+  "confidence": 0.1,
+  "summary": "No substantive conversation details provided yet",
+  "gpsLocation": null,
+  "transcript": {
+    "original": "Okay, it's working. Um, can you hear me?",
+    "cleaned": "Okay, it's working. can you hear me?",
+    "raw": {
+      "fullText": "Okay, it's working. Um, can you hear me?",
+      "segments": [
+        {
+          "text": "Okay, it's working. Um, can you hear me?",
+          "isFinal": true,
+          "segmentIndex": 0,
+          "timestamp": "2025-09-14T01:31:53.652Z"
+        }
+      ],
+      "wordCount": 8,
+      "charCount": 40,
+      "processingTime": 1757813513652
+    }
+  }
+}

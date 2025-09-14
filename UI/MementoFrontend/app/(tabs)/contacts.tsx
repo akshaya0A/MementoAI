@@ -150,30 +150,69 @@ export default function ContactsScreen() {
         </View>
       </View>
 
-      {/* Page Header */}
+      {/* Enhanced Page Header */}
       <View style={styles.pageHeader}>
-        <Text style={styles.pageTitle}>All Contacts</Text>
-        <Text style={styles.pageSubtitle}>{contacts.length} contacts in your network</Text>
-        
-        <TouchableOpacity style={styles.addContactButton}>
-          <IconSymbol name="plus" size={16} color={MementoColors.text.white} />
-          <Text style={styles.addContactButtonText}>Add Contact</Text>
-        </TouchableOpacity>
+        <View style={styles.pageHeaderTop}>
+          <View style={styles.pageTitleContainer}>
+            <Text style={styles.pageTitle}>All Contacts</Text>
+            <Text style={styles.pageSubtitle}>{filteredContacts.length} of {contacts.length} contacts in your network</Text>
+          </View>
+          
+          <View style={styles.pageActions}>
+            <TouchableOpacity 
+              style={[styles.viewModeButton, viewMode === 'list' && styles.viewModeButtonActive]} 
+              onPress={() => setViewMode('list')}
+            >
+              <IconSymbol 
+                name="list.bullet" 
+                size={16} 
+                color={viewMode === 'list' ? MementoColors.primary : MementoColors.text.secondary} 
+              />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.viewModeButton, viewMode === 'grid' && styles.viewModeButtonActive]} 
+              onPress={() => setViewMode('grid')}
+            >
+              <IconSymbol 
+                name="grid" 
+                size={16} 
+                color={viewMode === 'grid' ? MementoColors.primary : MementoColors.text.secondary} 
+              />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.addContactButton}
+              onPress={() => setShowAddContact(true)}
+            >
+              <IconSymbol name="plus" size={16} color={MementoColors.text.white} />
+              <Text style={styles.addContactButtonText}>Add Contact</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Enhanced Search */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputContainer}>
+            <IconSymbol name="magnifyingglass" size={16} color={MementoColors.text.muted} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search contacts, companies, roles..."
+              placeholderTextColor={MementoColors.text.muted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <IconSymbol name="xmark.circle.fill" size={16} color={MementoColors.text.muted} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
       </View>
 
-      {/* Search and Controls */}
+      {/* Sort and Filter Controls */}
       <View style={styles.searchAndControls}>
-        {/* Search */}
-        <View style={styles.searchContainer}>
-          <IconSymbol name="magnifyingglass" size={16} color={MementoColors.text.muted} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search contacts..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor={MementoColors.text.muted}
-          />
-        </View>
 
         {/* Sort and View Controls */}
         <View style={styles.controlsRow}>
@@ -227,7 +266,7 @@ export default function ContactsScreen() {
             <View style={styles.emptyState}>
               {contacts.length === 0 ? (
                 <>
-                  <IconSymbol name="users" size={48} color={MementoColors.text.muted} />
+                  <IconSymbol name="person.2" size={48} color={MementoColors.text.muted} />
                   <Text style={styles.emptyStateTitle}>No contacts yet</Text>
                   <Text style={styles.emptyStateText}>
                     Start building your professional network by adding contacts
@@ -319,7 +358,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: MementoFontSizes.md,
-    color: MementoColors.text.error,
+    color: MementoColors.error,
     textAlign: 'center',
     marginBottom: MementoSpacing.md,
   },
@@ -384,6 +423,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: MementoColors.border.light,
   },
+  pageHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: MementoSpacing.md,
+  },
+  pageTitleContainer: {
+    flex: 1,
+  },
+  pageActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: MementoSpacing.sm,
+  },
+  viewModeButton: {
+    padding: MementoSpacing.sm,
+    borderRadius: MementoBorderRadius.md,
+    backgroundColor: MementoColors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: MementoColors.border.light,
+  },
+  viewModeButtonActive: {
+    backgroundColor: MementoColors.primary + '10',
+    borderColor: MementoColors.primary,
+  },
   pageTitle: {
     fontSize: MementoFontSizes.xxxl,
     fontWeight: '800',
@@ -428,21 +492,23 @@ const styles = StyleSheet.create({
     borderBottomColor: MementoColors.border.light,
   },
   searchContainer: {
+    marginBottom: MementoSpacing.md,
+  },
+  searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: MementoColors.backgroundSecondary,
-    borderRadius: MementoBorderRadius.md,
+    borderRadius: MementoBorderRadius.lg,
     paddingHorizontal: MementoSpacing.md,
+    paddingVertical: MementoSpacing.md,
     borderWidth: 1,
     borderColor: MementoColors.border.light,
-    marginBottom: MementoSpacing.md,
+    gap: MementoSpacing.sm,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: MementoSpacing.md,
     fontSize: MementoFontSizes.md,
     color: MementoColors.text.primary,
-    marginLeft: MementoSpacing.sm,
   },
   controlsRow: {
     flexDirection: 'row',

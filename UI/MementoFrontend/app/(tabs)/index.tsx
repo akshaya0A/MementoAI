@@ -38,6 +38,35 @@ export default function DashboardScreen() {
       new Date(encounter.date).getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000
     )
   ).length;
+  const totalNotes = contacts.reduce((sum, contact) => sum + contact.notes.length, 0);
+
+  // Enhanced stats with better data
+  const stats = {
+    contacts: totalContacts,
+    encounters: totalEncounters,
+    thisWeek: recentEncounters,
+    notes: totalNotes,
+  };
+
+  const getStatIcon = (key: string) => {
+    switch (key) {
+      case 'contacts': return 'person.2.fill';
+      case 'encounters': return 'handshake.fill';
+      case 'thisWeek': return 'calendar.badge.clock';
+      case 'notes': return 'pencil.circle.fill';
+      default: return 'chart.bar.fill';
+    }
+  };
+
+  const getStatColor = (key: string) => {
+    switch (key) {
+      case 'contacts': return MementoColors.primary;
+      case 'encounters': return MementoColors.primary;
+      case 'thisWeek': return MementoColors.primary;
+      case 'notes': return MementoColors.primary;
+      default: return MementoColors.primary;
+    }
+  };
 
   const handleAddContact = async (contactData: Omit<Contact, 'id'>) => {
     try {
@@ -117,39 +146,47 @@ export default function DashboardScreen() {
       headerActions={headerActions}
     >
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Statistics Cards */}
+        {/* Enhanced Statistics Cards */}
         <View style={styles.statsContainer}>
-          <View style={styles.statsRow}>
+          <View style={styles.statsHeader}>
+            <Text style={styles.statsTitle}>Overview</Text>
+            <Text style={styles.statsSubtitle}>Your networking insights</Text>
+          </View>
+          <View style={styles.statsGrid}>
             <View style={styles.statItem}>
               <StatCard
                 title="Total Contacts"
-                value={totalContacts}
-                color={MementoColors.stats.contacts}
-                icon="users"
+                value={stats.contacts}
+                color={getStatColor('contacts')}
+                icon={getStatIcon('contacts')}
+                trend={stats.contacts > 0 ? '+12%' : undefined}
               />
             </View>
             <View style={styles.statItem}>
               <StatCard
-                title="Total Encounters"
-                value={totalEncounters}
-                color={MementoColors.stats.encounters}
-                icon="hand.raised"
+                title="Encounters"
+                value={stats.encounters}
+                color={getStatColor('encounters')}
+                icon={getStatIcon('encounters')}
+                trend={stats.encounters > 0 ? '+8%' : undefined}
               />
             </View>
             <View style={styles.statItem}>
               <StatCard
                 title="This Week"
-                value={recentEncounters}
-                color={MementoColors.stats.thisWeek}
-                icon="calendar"
+                value={stats.thisWeek}
+                color={getStatColor('thisWeek')}
+                icon={getStatIcon('thisWeek')}
+                trend={stats.thisWeek > 0 ? '+3' : undefined}
               />
             </View>
             <View style={styles.statItem}>
               <StatCard
                 title="Notes"
-                value={contacts.reduce((sum, contact) => sum + contact.notes.length, 0)}
-                color={MementoColors.stats.notes}
-                icon="pencil"
+                value={stats.notes}
+                color={getStatColor('notes')}
+                icon={getStatIcon('notes')}
+                trend={stats.notes > 0 ? '+5' : undefined}
               />
             </View>
           </View>
@@ -335,7 +372,21 @@ const styles = StyleSheet.create({
   statsContainer: {
     marginBottom: MementoSpacing.xl,
   },
-  statsRow: {
+  statsHeader: {
+    marginBottom: MementoSpacing.lg,
+  },
+  statsTitle: {
+    fontSize: MementoFontSizes.xl,
+    fontWeight: '700',
+    color: MementoColors.text.primary,
+    marginBottom: 4,
+  },
+  statsSubtitle: {
+    fontSize: MementoFontSizes.md,
+    color: MementoColors.text.secondary,
+    fontWeight: '400',
+  },
+  statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: MementoSpacing.md,

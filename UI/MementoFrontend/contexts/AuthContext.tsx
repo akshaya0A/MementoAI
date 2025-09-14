@@ -40,10 +40,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           console.log('Processing Firebase user:', firebaseUser.uid, firebaseUser.email);
           
           // Check if user document exists in Firestore
-          const userExists = await checkUserExists(firebaseUser.uid);
-          console.log('User exists in Firestore:', userExists);
+          const Exists = await checkUserExists(firebaseUser.uid);
+          console.log('User exists in Firestore:', Exists);
           
-          if (userExists) {
+          if (Exists) {
             // Get existing user data
             console.log('Loading existing user data...');
             const userData = await getUser(firebaseUser.uid);
