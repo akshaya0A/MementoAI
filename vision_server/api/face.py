@@ -70,11 +70,11 @@ class SimpleFacerec:
         face_locations = face_locations / self.frame_resizing
         return face_locations.astype(int), face_encodings
 
-    def compare_faces(face_encoding, known_face_encodings):
+    # def compare_faces(face_encoding, known_face_encodings):
 
-        face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
-        best_match_index = np.argmin(face_distances)
-        if(face_distances[best_match_index] < 0.6): #thresholding faces
-            return 
+    #     face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+    #     best_match_index = np.argmin(face_distances)
+    #     if(face_distances[best_match_index] < 0.6): #thresholding faces
+    #         return 
 
 

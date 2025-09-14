@@ -9,6 +9,8 @@ import io
 import cv2
 import time
 from face import SimpleFacerec
+import requests
+import pytesseract
 
 app = Flask(__name__)
 CORS(
@@ -83,7 +85,6 @@ def upload_file():
             
         # Convert to numpy array and validate it's a valid image
         try:
-            filename = './a.jpg'
             nparr = np.frombuffer(file_data, np.uint8)
             img_np = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
@@ -100,9 +101,17 @@ def upload_file():
             print(f"Image saved as: {output_filename}")
 
             # Detect faces
-            frame = cv2.imread(filename)
-            face_locations, face_encodings = sfr.detect_known_faces(frame)
+            face_locations, face_encodings = sfr.detect_known_faces(img_np)
             if face_locations.size != 0: # if there is a face present!
+
+                for face_encoding in face_encodings:
+                    #sfr.compare_faces(face_encoding, known_embeddings)
+                    
+                    #compare this face to the rest in the DB
+                    
+                    #if it matches, POST requestion to Metnra API
+                    pass
+
                 # Calculate areas for each face and sort by largest area
                 areas = [(loc[2] - loc[0]) * (loc[3] - loc[1]) for loc in face_locations]
                 sorted_indices = sorted(range(len(areas)), key=lambda i: areas[i], reverse=True)
@@ -112,28 +121,46 @@ def upload_file():
                 face_encoding = face_encodings[sorted_indices[0]]
                 y1, x2, y2, x1 = face_location[0], face_location[1], face_location[2], face_location[3]
 
-                face = {
-                    'embedding': face_encoding,
-                    'id': 65,
-                    'name': 'John Doe', 
+
+                body = {
+                    "uid": "vision_server",
+                    "sessionId": "session_1",
+                    "itemType": "embedding",
+                    "vector": face_encoding.tolist(),
+                    "meta": {
+                        "model": "face-recognition-128d",
+                        "source": "vision"
+                    }
                 }
 
-                print(face)
-
+                print("Sending face embedding to API...")
+                
+                try:
+                    response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/ingestArray", json=body)
+                    print(f"Response status code: {response.status_code}")
+                    print(f"Response headers: {response.headers}")
+                    print(f"Response text: {response.text}")
+                    
+                    if response.status_code == 200:
+                        if response.text.strip():  # Check if response has content
+                            response_data = response.json()
+                            print(f"API Response: {response_data}")
+                        else:
+                            print("API returned empty response")
+                    elif response.status_code == 500:
+                        print("Backend server error (500) - continuing with local processing")
+                        print("Face embedding extracted successfully but not stored remotely")
+                    else:
+                        print(f"API request failed with status {response.status_code}")
+                        print(f"Error response: {response.text}")
+                        
+                except requests.exceptions.RequestException as e:
+                    print(f"Request error: {e}")
+                except ValueError as e:
+                    print(f"JSON parsing error: {e}")
+                    print(f"Raw response: {response.text}")
+                
                 #sfr.compare_faces(face_encoding, known_embeddings)
-
-            
-            
-            
-            # # Optional: Try to display if GUI is available, but don't fail if it's not
-            # try:
-            #     cv2.imshow('Uploaded Image', img_np)
-            #     cv2.waitKey(1000)
-            #     cv2.destroyAllWindows()
-            #     print("Image displayed successfully")
-            # except Exception as display_error:
-            #     print(f"Could not display image (headless environment?): {display_error}")
-            #     print("Image processing completed without display")
             
             return jsonify({
                 'message': 'Image processed successfully',

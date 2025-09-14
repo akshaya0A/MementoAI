@@ -3,3 +3,5 @@ __pycache__
 *.jpg
 test2.py
 test.py
+*.key
+*.png
