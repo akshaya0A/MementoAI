@@ -1,10 +1,11 @@
 // src/index.ts
-// MentraOS speech → ChatGPT summary → spoken recap
-// Node 18+ or Bun. Uses OpenAI Chat Completions with function calling and AJV for runtime validation.
+// MentraOS speech → AI summary → spoken recap
+// Node 18+ or Bun. Uses Claude/OpenAI Chat Completions with function calling and AJV for runtime validation.
 
 import 'dotenv/config';
 import { AppServer, AppSession } from '@mentra/sdk';
 import Ajv from 'ajv';
+import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
@@ -12,6 +13,8 @@ import { join } from 'path';
 const {
   MENTRAOS_API_KEY,
   PACKAGE_NAME,
+  CLAUDE_API_KEY,
+  CLAUDE_MODEL,
   OPENAI_API_KEY,
   OPENAI_MODEL,
   WAKE_WORD,
@@ -19,14 +22,31 @@ const {
   USER_ID
 } = process.env;
 
-if (!MENTRAOS_API_KEY || !PACKAGE_NAME || !OPENAI_API_KEY) {
+if (!MENTRAOS_API_KEY || !PACKAGE_NAME) {
   console.error(
-    'Missing env. Required: MENTRAOS_API_KEY, PACKAGE_NAME, OPENAI_API_KEY'
+    'Missing env. Required: MENTRAOS_API_KEY, PACKAGE_NAME'
   );
   process.exit(1);
 }
 
-const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+if (!CLAUDE_API_KEY && !OPENAI_API_KEY) {
+  console.error(
+    'Missing API keys. Required: CLAUDE_API_KEY or OPENAI_API_KEY (or both for fallback)'
+  );
+  process.exit(1);
+}
+
+const anthropic = CLAUDE_API_KEY ? new Anthropic({ apiKey: CLAUDE_API_KEY }) : null;
+const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
+
+// Test Claude models availability
+if (anthropic) {
+  anthropic.models.list().then(models => {
+    console.log('Available Claude models:', models.data.map(m => m.id));
+  }).catch(err => {
+    console.error('Error fetching Claude models:', err.message);
+  });
+}
 
 // ---------- Event-focused types ----------
 export interface Summary {
@@ -77,8 +97,48 @@ const schema = {
 const ajv = new Ajv({ allErrors: true, strict: true });
 const validate = ajv.compile(schema as any);
 
-// ---------- OpenAI tool (function) definition ----------
-const tool = {
+// ---------- AI tool definitions ----------
+const claudeTool = {
+  name: 'summary',
+  description:
+    'Extract key information from recruiter/student conversations at events. Focus on contact details, skills, interests, and next steps.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      info: { 
+        type: 'string' as const, 
+        description: 'Main important information to speak back (1-2 sentences about the person or opportunity)' 
+      },
+      contact: {
+        type: 'string' as const,
+        description: 'Contact information exchanged (email, phone, LinkedIn, etc.)',
+      },
+      skills: {
+        type: 'array' as const,
+        items: { type: 'string' as const },
+        description: 'Skills, interests, projects, or technologies discussed',
+      },
+      location: {
+        type: 'string' as const,
+        description: 'Where the person was met (booth number, company name, event location, etc.)',
+      },
+      next: {
+        type: 'string' as const,
+        description: 'Follow-up actions or next steps discussed',
+      },
+      conf: {
+        type: 'number' as const,
+        minimum: 0,
+        maximum: 1,
+        description: 'Model confidence',
+      },
+    },
+    required: ['info', 'contact', 'skills', 'location', 'next', 'conf'],
+    additionalProperties: false,
+  },
+};
+
+const openaiTool = {
   type: 'function' as const,
   function: {
     name: 'summary',
@@ -146,53 +206,229 @@ Invalid JSON:
 ${typeof invalidJSON === 'string' ? invalidJSON : JSON.stringify(invalidJSON)}`;
 }
 
-// Summarize using ChatGPT (OpenAI) with forced tool use
+// Summarize using AI with fallback
 async function summarize(
   transcript: string,
   session: AppSession
 ): Promise<Summary> {
   const started = Date.now();
   session.logger.info(
-    `[OpenAI] Summarize request; chars=${transcript.length}`
+    `[AI] Summarize request; chars=${transcript.length}`
   );
 
-  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: 'system', content: PROMPT },
-      {
-        role: 'user',
-      content:
-        'Extract key networking information from this conversation at an event. Focus on contact details, skills/interests, opportunities, location where met, and next steps.\n\nConversation:\n' +
-              transcript,
-          },
-  ];
-
-  const summary = await callOpenAI(messages, session);
+  // Try Claude first if available
+  if (anthropic) {
+    session.logger.info(`[Claude] Attempting to use Claude API...`);
+    try {
+      const summary = await callClaude(transcript, session);
   session.logger.info(
-    `[OpenAI] Summarize done in ${Date.now() - started}ms`
+    `[Claude] Summarize done in ${Date.now() - started}ms`
   );
   return summary;
+    } catch (e) {
+      session.logger.warn(`[Claude] Failed, falling back to OpenAI: ${(e as Error).message}`);
+      session.logger.error(`[Claude] Full error: ${JSON.stringify(e)}`);
+    }
+  } else {
+    session.logger.warn(`[Claude] Claude client not initialized, using OpenAI`);
+  }
+
+  // Fallback to OpenAI if available
+  if (openai) {
+    try {
+      const summary = await callOpenAI(transcript, session);
+      session.logger.info(
+        `[OpenAI] Summarize done in ${Date.now() - started}ms`
+      );
+      return summary;
+    } catch (e) {
+      session.logger.error(`[OpenAI] Also failed: ${(e as Error).message}`);
+      throw new Error('Both Claude and OpenAI failed');
+    }
+  }
+
+  throw new Error('No AI provider available');
 }
 
-async function callOpenAI(
-  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+async function callClaude(
+  transcript: string,
   session: AppSession
 ): Promise<Summary> {
+  if (!anthropic) {
+    throw new Error('Claude client not initialized');
+  }
+
   // Basic retry on 429/5xx
   let attempt = 0;
   const maxAttempts = 3;
 
   while (true) {
     attempt++;
-    let res: OpenAI.Chat.Completions.ChatCompletion;
 
     try {
-      res = await openai.chat.completions.create({
+      const response = await anthropic.messages.create({
+        model: CLAUDE_MODEL || 'claude-3-5-haiku-20241022',
+        max_tokens: 1000,
+        temperature: 0.1,
+        system: PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: `Extract key networking information from this conversation at an event. Focus on contact details, skills/interests, opportunities, location where met, and next steps.\n\nConversation:\n${transcript}`,
+          },
+        ],
+        tools: [claudeTool],
+        tool_choice: { type: 'tool', name: 'summary' },
+      });
+
+      // Check for tool use
+      const toolUse = response.content.find((item: any) => item.type === 'tool_use') as any;
+      if (!toolUse || toolUse.name !== 'summary') {
+        session.logger.error(`[Claude] No tool use in response or wrong tool`);
+        throw new Error('No tool use in response or wrong tool');
+      }
+
+      // Parse and validate
+      let parsed: unknown;
+      try {
+        // Check if toolUse.input is already an object or a string
+        if (typeof toolUse.input === 'string') {
+          parsed = JSON.parse(toolUse.input);
+        } else {
+          parsed = toolUse.input;
+        }
+      } catch (e) {
+        session.logger.error(
+          `[Claude] Invalid JSON from tool: ${typeof toolUse.input === 'string' ? toolUse.input : JSON.stringify(toolUse.input)}`
+        );
+        throw new Error('Invalid JSON from tool');
+      }
+
+      return validateInput(parsed, session);
+    } catch (e: any) {
+      const status = e?.status ?? 500;
+      session.logger.error(`[Claude] Request failed (attempt ${attempt}/${maxAttempts}): ${String(e?.message || e)}`);
+      session.logger.error(`[Claude] Error details:`, e);
+      
+      if ((status === 429 || status >= 500) && attempt < maxAttempts) {
+        const backoff = 300 * Math.pow(2, attempt - 1);
+        session.logger.warn(
+          `[Claude] ${status} received. Backing off ${backoff}ms then retrying (${attempt}/${maxAttempts})`
+        );
+        await new Promise(r => setTimeout(r, backoff));
+        continue;
+      }
+      session.logger.error(`[Claude] Request failed: ${String(e?.message || e)}`);
+      throw e;
+    }
+  }
+}
+
+async function callOpenAI(
+  transcript: string,
+  session: AppSession
+): Promise<Summary> {
+  if (!openai) {
+    throw new Error('OpenAI client not initialized');
+  }
+
+  // Basic retry on 429/5xx
+  let attempt = 0;
+  const maxAttempts = 3;
+
+  while (true) {
+    attempt++;
+
+    try {
+      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+        { role: 'system', content: PROMPT },
+        {
+          role: 'user',
+          content: `Extract key networking information from this conversation at an event. Focus on contact details, skills/interests, opportunities, location where met, and next steps.\n\nConversation:\n${transcript}`,
+        },
+      ];
+
+      const res = await openai.chat.completions.create({
         model: OPENAI_MODEL || 'gpt-4o-mini',
         messages,
-        tools: [tool],
+        tools: [openaiTool],
         tool_choice: { type: 'function', function: { name: 'summary' } }, // force function call
         temperature: 0.1,
       });
+
+      const choice = res.choices?.[0];
+      const toolCalls = choice?.message?.tool_calls;
+      const toolCall = toolCalls?.find(
+        (c: any) => c?.function?.name === 'summary'
+      );
+
+      if (!toolCall) {
+        // One-shot repair if we got plain text or malformed output
+        const rawText = (choice?.message?.content as string) || '';
+        session.logger.warn(
+          `[OpenAI] No tool_call payload found. Attempting one-shot repair.`
+        );
+
+        const repairMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
+          [
+            { role: 'system', content: 'Return corrected JSON only via the summary tool. No commentary.' },
+            { role: 'user', content: repairPrompt(rawText) },
+          ];
+
+        const repaired = await openai.chat.completions.create({
+          model: OPENAI_MODEL || 'gpt-4o-mini',
+          messages: repairMessages,
+          tools: [openaiTool],
+          tool_choice: { type: 'function', function: { name: 'summary' } },
+          temperature: 0,
+        });
+
+        const repairedChoice = repaired.choices?.[0];
+        const repairedTool = repairedChoice?.message?.tool_calls?.find(
+          (c: any) => c?.function?.name === 'summary'
+        );
+        if (!repairedTool) {
+          throw new Error('Repair did not return a summary tool call');
+        }
+        const args = parseJSON((repairedTool as any).function.arguments);
+        return validateInput(args, session);
+      }
+
+      const args = parseJSON((toolCall as any).function.arguments);
+      try {
+        return validateInput(args, session);
+      } catch (e: any) {
+        // Validation failed — try a repair pass using the invalid JSON
+        session.logger.warn(
+          `[Validate] Invalid JSON from tool. Attempting repair: ${String(
+            e?.message || e
+          ).slice(0, 200)}`
+        );
+
+        const repairMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
+          [
+            { role: 'system', content: 'Return corrected JSON only via the summary tool. No commentary.' },
+            { role: 'user', content: repairPrompt((toolCall as any).function.arguments) },
+          ];
+
+        const repaired = await openai.chat.completions.create({
+          model: OPENAI_MODEL || 'gpt-4o-mini',
+          messages: repairMessages,
+          tools: [openaiTool],
+          tool_choice: { type: 'function', function: { name: 'summary' } },
+          temperature: 0,
+        });
+
+        const repairedChoice = repaired.choices?.[0];
+        const repairedTool = repairedChoice?.message?.tool_calls?.find(
+          (c: any) => c?.function?.name === 'summary'
+        );
+        if (!repairedTool) {
+          throw new Error('Repair did not return a summary tool call');
+        }
+        const repairArgs = parseJSON((repairedTool as any).function.arguments);
+        return validateInput(repairArgs, session);
+      }
     } catch (e: any) {
       const status = e?.status ?? 500;
       if ((status === 429 || status >= 500) && attempt < maxAttempts) {
@@ -205,80 +441,6 @@ async function callOpenAI(
       }
       session.logger.error(`[OpenAI] Request failed: ${String(e?.message || e)}`);
       throw e;
-    }
-
-    const choice = res.choices?.[0];
-    const toolCalls = choice?.message?.tool_calls;
-    const toolCall = toolCalls?.find(
-      (c: any) => c?.function?.name === 'summary'
-    );
-
-    if (!toolCall) {
-      // One-shot repair if we got plain text or malformed output
-      const rawText = (choice?.message?.content as string) || '';
-      session.logger.warn(
-        `[OpenAI] No tool_call payload found. Attempting one-shot repair.`
-      );
-
-      const repairMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
-        [
-          { role: 'system', content: 'Return corrected JSON only via the summary tool. No commentary.' },
-          { role: 'user', content: repairPrompt(rawText) },
-        ];
-
-      const repaired = await openai.chat.completions.create({
-        model: OPENAI_MODEL || 'gpt-4o-mini',
-        messages: repairMessages,
-        tools: [tool],
-        tool_choice: { type: 'function', function: { name: 'summary' } },
-        temperature: 0,
-      });
-
-      const repairedChoice = repaired.choices?.[0];
-      const repairedTool = repairedChoice?.message?.tool_calls?.find(
-        (c: any) => c?.function?.name === 'summary'
-      );
-      if (!repairedTool) {
-        throw new Error('Repair did not return a summary tool call');
-      }
-      const args = parseJSON((repairedTool as any).function.arguments);
-      return validateInput(args, session);
-    }
-
-    const args = parseJSON((toolCall as any).function.arguments);
-    try {
-      return validateInput(args, session);
-    } catch (e: any) {
-      // Validation failed — try a repair pass using the invalid JSON
-      session.logger.warn(
-        `[Validate] Invalid JSON from tool. Attempting repair: ${String(
-          e?.message || e
-        ).slice(0, 200)}`
-      );
-
-      const repairMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
-        [
-          { role: 'system', content: 'Return corrected JSON only via the summary tool. No commentary.' },
-          { role: 'user', content: repairPrompt((toolCall as any).function.arguments) },
-        ];
-
-      const repaired = await openai.chat.completions.create({
-        model: OPENAI_MODEL || 'gpt-4o-mini',
-        messages: repairMessages,
-        tools: [tool],
-        tool_choice: { type: 'function', function: { name: 'summary' } },
-        temperature: 0,
-      });
-
-      const repairedChoice = repaired.choices?.[0];
-      const repairedTool = repairedChoice?.message?.tool_calls?.find(
-        (c: any) => c?.function?.name === 'summary'
-      );
-      if (!repairedTool) {
-        throw new Error('Repair did not return a summary tool call');
-      }
-      const repairArgs = parseJSON((repairedTool as any).function.arguments);
-      return validateInput(repairArgs, session);
     }
   }
 }
@@ -325,6 +487,7 @@ function setupPipeline(session: AppSession) {
   // --- STATE ---
   let armed = false;           // after wake phrase
   let collecting = false;      // currently recording
+  let processing = false;      // currently processing (ignore new events)
   let segments: string[] = []; // finalized chunks
   let partial: string = "";    // latest interim text
   let idleTimeout: NodeJS.Timeout | null = null;
@@ -363,6 +526,7 @@ function setupPipeline(session: AppSession) {
   const finishNote = async (reason: string) => {
     collecting = false;
     armed = false;
+    processing = true; // Set processing flag to ignore new events
     if (idleTimeout) { clearTimeout(idleTimeout); idleTimeout = null; }
 
     // Commit any remaining partial
@@ -478,6 +642,9 @@ function setupPipeline(session: AppSession) {
       session.logger.error(`[Pipeline] Error: ${(err as Error).message}`);
       await session.audio.speak("Sorry, something went wrong summarizing.");
       session.layouts.showTextWall("Error summarizing");
+    } finally {
+      // Reset processing flag to allow new conversations
+      processing = false;
     }
   };
 
@@ -490,6 +657,11 @@ function setupPipeline(session: AppSession) {
     endTime?: number;
     speakerId?: string;
   }) => {
+    // Ignore all transcription if we're processing
+    if (processing) {
+      return;
+    }
+
     const { text, isFinal } = data;
     const lower = text.toLowerCase().trim();
 
@@ -519,6 +691,12 @@ function setupPipeline(session: AppSession) {
     const STOP_PHRASES = ["done", "that's it", "stop recording", "stop"];
     const hasStop = STOP_PHRASES.some((p) => lower.includes(p));
     if (hasStop && (isFinal || lower.endsWith("done") || lower.endsWith("stop"))) {
+
+      // Immediately stop all recording and processing
+      collecting = false;
+      armed = false;
+      processing = true; // Set processing flag immediately to block new events
+      if (idleTimeout) { clearTimeout(idleTimeout); idleTimeout = null; }
       void finishNote("user-stopped");
       return;
     }
@@ -538,20 +716,28 @@ function setupPipeline(session: AppSession) {
   // ============== Voice Activity Detection ===================================
 
   const onVoiceActivity = (data: { status: boolean | "true" | "false" }) => {
+    // Ignore all VAD if we're processing
+    if (processing) {
+      return;
+    }
+
     const isSpeaking = data.status === true || data.status === "true";
     
     session.logger.info(`Voice Activity: ${isSpeaking ? 'Speaking' : 'Silent'}`, {
       status: data.status
     } as any);
 
-    // Update visual indicator based on voice activity
-    if (collecting) {
-      const live = liveNoteText();
-      const status = isSpeaking ? "🎤 Speaking..." : "⏸️ Listening...";
-      session.layouts.showTextWall(
-        `${status}\n\n${live ? live : "..."}\n\nSay "done" to finish.`
-      );
+    // Only process VAD if we're actively collecting
+    if (!collecting) {
+      return;
     }
+
+    // Update visual indicator based on voice activity
+    const live = liveNoteText();
+    const status = isSpeaking ? "🎤 Speaking..." : "⏸️ Listening...";
+    session.layouts.showTextWall(
+      `${status}\n\n${live ? live : "..."}\n\nSay "done" to finish.`
+    );
   };
 
   // Subscribe to events
@@ -755,7 +941,7 @@ Event Networking Assistant - Wake Word → Conversation → Structured Info
 Perfect for career fairs, hackathons, conferences, and networking events!
 
 Features:
-- Listens for wake word (configurable via WAKE_WORD env var, default: "hey mira")
+- Listens for wake word (configurable via WAKE_WORD env var, default: "hey memento")
 - After wake word, captures networking conversation until silence
 - Extracts contact details, skills, interests, and next steps
 - Speaks back structured networking information
@@ -771,8 +957,11 @@ Captures:
 Environment Variables:
 - MENTRAOS_API_KEY: Your MentraOS API key
 - PACKAGE_NAME: Your app package name
-- OPENAI_API_KEY: Your OpenAI API key
-- WAKE_WORD: Wake word to trigger listening (default: "hey mira")
+- CLAUDE_API_KEY: Your Claude API key (primary)
+- OPENAI_API_KEY: Your OpenAI API key (fallback)
+- CLAUDE_MODEL: Claude model (default: claude-3-5-sonnet-20240620)
+- OPENAI_MODEL: OpenAI model (default: gpt-4o-mini)
+- WAKE_WORD: Wake word to trigger listening (default: "hey memento")
 - PORT: Server port (default: 3030)
 
 Usage:
@@ -782,4 +971,3 @@ Usage:
 4. Wait for silence (2 seconds)
 5. Hear structured summary with contact details and next steps
 */
-    
