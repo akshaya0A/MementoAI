@@ -1,0 +1,11 @@
+# Dedalus Labs API Configuration
+DEDALUS_API_KEY=your_dedalus_api_key_here
+
+# OpenAI API Configuration (if using OpenAI models)
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Exa API Configuration (for semantic search)
+EXA_API_KEY=your_exa_api_key_here
+
+# Brave Search API Configuration (for web search)
+BRAVE_API_KEY=your_brave_api_key_here
