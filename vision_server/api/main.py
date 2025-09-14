@@ -90,7 +90,7 @@ def upload_file():
             
         # Convert to numpy array and validate it's a valid image
         try:
-            filename = 'test.jpg'
+            #filename = 'test.jpg'
             nparr = np.frombuffer(file_data, np.uint8)
             img_np = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
@@ -151,11 +151,10 @@ def upload_file():
                 print(f"Error: {response.status_code}")
                 print(response.text)
 
-            
-
+        
             # Detect faces
-            frame = cv2.imread(filename)
-            face_locations, face_encodings = sfr.detect_known_faces(frame)#img_np
+            #frame = cv2.imread(filename)
+            face_locations, face_encodings = sfr.detect_known_faces(img_np)#frame
             if face_locations.size != 0: # if there is a face present!
 
                 for face_encoding in face_encodings:
@@ -165,13 +164,14 @@ def upload_file():
                     body = {
                         "queryVector": face_encoding.tolist(), # 512-dimensional query vector
                         "numNeighbors": 10,
-                        "filters": {
-                            "modality": "face",
-                            "model": "face-recognition-v1"
-                        },
                     }
                     
                     response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/search", json=body)
+                    print(f"Response status code: {response.status_code}")
+                    print(f"Response headers: {response.headers}")
+                    print(f"Response text: {response.text}")
+
+                    response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/searchFaces", json=body)
                     print(f"Response status code: {response.status_code}")
                     print(f"Response headers: {response.headers}")
                     print(f"Response text: {response.text}")
@@ -200,7 +200,7 @@ def upload_file():
                 print("Sending face embedding to API...")
                 
                 try:
-                    response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/ingestArray", json=body)
+                    response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/ingestEmbedding", json=body)
                     print(f"Response status code: {response.status_code}")
                     print(f"Response headers: {response.headers}")
                     print(f"Response text: {response.text}")
