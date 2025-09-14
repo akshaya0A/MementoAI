@@ -1,6 +1,6 @@
 {
   "config": {
-    "dimensions": 512,
+    "dimensions": 128,
     "distanceMeasureType": "COSINE_DISTANCE",
     "featureNormType": "UNIT_L2_NORM",
     "approximateNeighborsCount": 150,

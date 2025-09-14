@@ -70,7 +70,7 @@ curl -X POST https://mementoai-backend-528890859039.us-central1.run.app/mintUplo
 ---
 
 ### 3. Ingest Audio Metadata
-**POST** `/ingestArray`
+**POST** `/ingestAudio`
 
 **Description**: Store audio metadata and conversation data from smart glasses in Firestore.
 
