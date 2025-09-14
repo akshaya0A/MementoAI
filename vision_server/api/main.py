@@ -54,6 +54,16 @@ def before_request():
     #here, we can establish DB connection and init anything
     #maybe cache face embeddings?
     global known_embeddings
+    global known_uids
+
+    # response = requests.get("https://mementoai-backend-528890859039.us-central1.run.app/xxx")
+    # print(response.json())
+
+    # faces = response.json()
+    # for face in faces:
+    #     known_embeddings.append(face['embedding'])
+    #     known_uids.append(face['uid'])
+
     # known_embeddings = np.array(np.load("face_encoding.npy"))
 
 @app.route('/upload', methods=['POST'])
@@ -90,7 +100,7 @@ def upload_file():
             
         # Convert to numpy array and validate it's a valid image
         try:
-            #filename = 'test.jpg'
+            # filename = 'test.jpg'
             nparr = np.frombuffer(file_data, np.uint8)
             img_np = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
@@ -107,7 +117,9 @@ def upload_file():
             print(f"Image saved as: {output_filename}")
 
             # Perform OCR
-            image = Image.open('ocr2.jpg')
+            # Convert BGR to RGB for PIL
+            img_rgb = cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB)
+            image = Image.fromarray(img_rgb)
             text = pytesseract.image_to_string(image)
             api_key = os.getenv('ANTHROPIC_API_KEY') # Set up the API key (make sure to set your ANTHROPIC_API_KEY environment variable)
 
@@ -125,56 +137,64 @@ def upload_file():
                 "messages": [
                     {
                         "role": "user",
-                        "content": f"You are an expert text cleaner and name extractor. Input OCR text: \"\"\"{text}\"\"\"Tasks: 1. Correct OCR errors (fix spelling, spacing, and obvious formatting issues) while preserving meaning. 2. Detect a personal name (first, last, or both). If none is found, leave blank. Output format (exactly two lines, nothing else): CLEANED: <cleaned text> NAME: <name or leave blank>"
+                        "content": f"You are an expert text cleaner and name extractor. Input OCR text: \"\"\"{text}\"\"\"Tasks: 1. Correct OCR errors (fix spelling, spacing, and obvious formatting issues) while preserving meaning. 2. Detect a personal name (first, last, or both). If none is found, leave blank. Output format (exactly two lines, nothing else): CLEANED: <cleaned text> NAME: <name or leave blank. If the cleaned text is not useful, LEAVE IT BLANK."
                     }
                 ]
             }
 
-            response = requests.post(url, headers=headers, json=data)
-            if response.status_code == 200:
-                result = response.json()
-                output = result['content'][0]['text']
+            #DEBUG
+            # response = requests.post(url, headers=headers, json=data)
+            # if response.status_code == 200:
+            #     result = response.json()
+            #     output = result['content'][0]['text']
 
-                cleaned = re.search(r"CLEANED:\s*(.*)", output).group(1)
-                name = re.search(r"NAME:\s*(.*)", output).group(1) or None
-                print(cleaned, name)
+            #     cleaned = re.search(r"CLEANED:\s*(.*)", output).group(1)
+            #     name = re.search(r"NAME:\s*(.*)", output).group(1) or None
+            #     print(cleaned, name)
 
-                body = {
-                    "name": name,
-                    "raw_text": cleaned,
-                }
+            #     body = {
+            #         "name": name,
+            #         "raw_text": cleaned,
+            #     }
 
-                #send OCRd text to backend
-                #response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/xxx", json=body)
+            #     #send OCRd text to backend
+            #     #response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/xxx", json=body)
 
-            else:
-                print(f"Error: {response.status_code}")
-                print(response.text)
+            # else:
+            #     print(f"Error: {response.status_code}")
+            #     print(response.text)
 
         
             # Detect faces
             #frame = cv2.imread(filename)
-            face_locations, face_encodings = sfr.detect_known_faces(img_np)#frame
+            face_locations, face_encodings = sfr.detect_known_faces(img_np)
             if face_locations.size != 0: # if there is a face present!
 
-                for face_encoding in face_encodings:
-                    #sfr.compare_faces(face_encoding, known_embeddings)
+                # for face_encoding in face_encodings:
+                #     ind = sfr.compare_faces(face_encoding, known_embeddings)
+                #     if ind == -1:
+                #         print("NO Face recognized!")
+                #     else:
+                #         print("Face recognized!")
+                #         print(f"UID: {known_uids[ind]}")
                     
+                    #endpoint for mentraOS!
+                        
                     #compare this face to the rest in the DB
-                    body = {
-                        "queryVector": face_encoding.tolist(), # 512-dimensional query vector
-                        "numNeighbors": 10,
-                    }
+                    # body = {
+                    #     "queryVector": face_encoding.tolist(), # 512-dimensional query vector
+                    #     "numNeighbors": 10,
+                    # }
                     
-                    response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/search", json=body)
-                    print(f"Response status code: {response.status_code}")
-                    print(f"Response headers: {response.headers}")
-                    print(f"Response text: {response.text}")
+                    # response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/search", json=body)
+                    # print(f"Response status code: {response.status_code}")
+                    # print(f"Response headers: {response.headers}")
+                    # print(f"Response text: {response.text}")
 
-                    response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/searchFaces", json=body)
-                    print(f"Response status code: {response.status_code}")
-                    print(f"Response headers: {response.headers}")
-                    print(f"Response text: {response.text}")
+                    # response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/searchFaces", json=body)
+                    # print(f"Response status code: {response.status_code}")
+                    # print(f"Response headers: {response.headers}")
+                    # print(f"Response text: {response.text}")
 
                 # Calculate areas for each face and sort by largest area
                 areas = [(loc[2] - loc[0]) * (loc[3] - loc[1]) for loc in face_locations]
