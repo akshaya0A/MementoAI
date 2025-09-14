@@ -1,44 +1,14 @@
 # services/nearest_neighbor.py
-import os
-from typing import Dict, List, Optional, Tuple
-from google.cloud import aiplatform, firestore
-from .vector_store import init_vertex, _build_restricts
+from typing import Dict, List, Optional
+from google.cloud import firestore
+from .vector_store import init_vertex, find_neighbors
 
-def find_nearest_neighbors(
-    query_vector: List[float],
-    num_neighbors: int = 10,
-    filters: Optional[Dict] = None,
-    uid: Optional[str] = None
-) -> List[Dict]:
+def _sim_from_distance(distance: float) -> float:
+    # assuming COSINE_DISTANCE (sim = 1 - dist)
     try:
-        index_ep, deployed_id = init_vertex()
-
-        restricts = _build_restricts(filters or {})
-        if uid:
-            restricts.append({"namespace": "uid", "allow_list": [uid]})
-
-        resp = index_ep.find_neighbors(
-            deployed_index_id=deployed_id,
-            queries=[{
-                "datapoint": {"feature_vector": [float(x) for x in query_vector]},
-                "neighbor_count": int(num_neighbors),
-                "restricts": restricts or None
-            }]
-        )
-
-        out = []
-        if resp and resp[0].neighbors:
-            for n in resp[0].neighbors:
-                out.append({
-                    "vector_id": n.datapoint.datapoint_id,  # keep snake_case for your other funcs
-                    "distance": n.distance,
-                    "metadata": {}
-                })
-        return out
-    except Exception as e:
-        print(f"Error in find_nearest_neighbors: {str(e)}")
-        return []
-
+        return 1.0 - float(distance)
+    except Exception:
+        return 0.0
 
 def find_similar_faces(
     db: firestore.Client,
@@ -48,116 +18,119 @@ def find_similar_faces(
     session_id: Optional[str] = None
 ) -> List[Dict]:
     """
-    Find similar face embeddings and enrich with Firestore metadata.
-    
-    Args:
-        db: Firestore client
-        query_vector: Face embedding vector
-        num_neighbors: Number of similar faces to return
-        uid: Optional user ID filter
-        session_id: Optional session ID filter
-    
-    Returns:
-        List of similar faces with full metadata from Firestore
+    Vertex top-K, then enrich each neighbor from:
+      /embeddings/{vectorId}  (pointer + uid/personId)
+      /encounters/{vectorId}  (summary, timestamp, etc.)
     """
-    try:
-        # Search for similar vectors
-        filters = {"modality": "face"}
-        neighbors = find_nearest_neighbors(
-            query_vector=query_vector,
-            num_neighbors=num_neighbors,
-            filters=filters,
-            uid=uid
-        )
-        
-        # Enrich with Firestore metadata
-        enriched_results = []
-        for neighbor in neighbors:
-            vector_id = neighbor['vector_id']
-            
-            # Look up the full document in Firestore
-            vector_doc = db.document(f"vectorsIndex/{vector_id}").get()
-            if vector_doc.exists:
-                vector_data = vector_doc.to_dict()
-                user_path = vector_data.get('path')
-                
-                if user_path:
-                    user_doc = db.document(user_path).get()
-                    if user_doc.exists:
-                        user_data = user_doc.to_dict()
-                        
-                        # Filter by session_id if provided
-                        if session_id and user_data.get('sessionId') != session_id:
-                            continue
-                        
-                        enriched_result = {
-                            'vector_id': vector_id,
-                            'distance': neighbor['distance'],
-                            'uid': user_data.get('uid'),
-                            'session_id': user_data.get('sessionId'),
-                            'item_type': user_data.get('itemType'),
-                            'model': user_data.get('model'),
-                            'quality': user_data.get('quality'),
-                            'identity_id': user_data.get('identityId'),
-                            'tenant_id': user_data.get('tenantId'),
-                            'created_at': user_data.get('createdAt'),
-                            'metadata': user_data.get('meta', {}),
-                            'firestore_path': user_path
-                        }
-                        enriched_results.append(enriched_result)
-        
-        return enriched_results
-        
-    except Exception as e:
-        print(f"Error in find_similar_faces: {str(e)}")
-        return []
+    # Query Vertex
+    init_vertex()
+    neighbors = find_neighbors(
+        query_vector,
+        num_neighbors=num_neighbors,
+        filters={"modality": "face", "model": "face-128@v1"},
+        uid=uid,
+    )
+
+    results: List[Dict] = []
+    for n in neighbors:
+        vector_id = n.get("vectorId") or n.get("vector_id")
+        if not vector_id:
+            continue
+
+        emb_ref = db.document(f"embeddings/{vector_id}")
+        emb_doc = emb_ref.get()
+        if not emb_doc.exists:
+            continue
+        emb = emb_doc.to_dict()
+
+        # Optional filters
+        if uid and emb.get("uid") != uid:
+            continue
+
+        enc_ref = db.document(f"encounters/{vector_id}")
+        enc_doc = enc_ref.get()
+        enc = enc_doc.to_dict() if enc_doc.exists else {}
+
+        if session_id and enc and enc.get("sessionId") != session_id:
+            continue
+
+        person_id = emb.get("personId")
+        person = {}
+        if person_id:
+            p_doc = db.document(f"people/{person_id}").get()
+            if p_doc.exists:
+                person = {"id": person_id, **p_doc.to_dict()}
+
+        distance = float(n["distance"])
+        results.append({
+            "vectorId": vector_id,
+            "distance": distance,
+            "similarity": _sim_from_distance(distance),
+            "uid": emb.get("uid"),
+            "person": person or None,
+            "encounter": {
+                "id": vector_id,
+                "sessionId": enc.get("sessionId"),
+                "summary": enc.get("summary"),
+                "timestamp": enc.get("timestamp"),
+                "location": enc.get("location"),
+            } if enc else None,
+            "paths": {
+                "embedding": emb_ref.path,
+                "encounter": enc_ref.path if enc else None,
+            },
+        })
+
+    return results
 
 def search_by_identity(
     db: firestore.Client,
-    identity_id: str,
+    person_id: str,
     num_neighbors: int = 10,
     uid: Optional[str] = None
 ) -> List[Dict]:
     """
-    Search for faces of a specific identity.
-    
-    Args:
-        db: Firestore client
-        identity_id: The identity ID to search for
-        num_neighbors: Number of results to return
-        uid: Optional user ID filter
-    
-    Returns:
-        List of matching faces for the identity
+    List embeddings linked to a given person:
+      query: /embeddings where personId == person_id (and optional uid)
+      enrich with /encounters/{vectorId} and /people/{personId}
     """
-    try:
-        # Get all faces for this identity from Firestore
-        query = db.collection_group('embeddings').where('identityId', '==', identity_id)
-        if uid:
-            query = query.where('uid', '==', uid)
-        
-        identity_docs = query.limit(num_neighbors).stream()
-        results = []
-        
-        for doc in identity_docs:
-            data = doc.to_dict()
-            results.append({
-                'vector_id': data.get('vectorId'),
-                'distance': 0.0,  # Exact identity match
-                'uid': data.get('uid'),
-                'session_id': data.get('sessionId'),
-                'item_type': data.get('itemType'),
-                'model': data.get('model'),
-                'quality': data.get('quality'),
-                'identity_id': data.get('identityId'),
-                'tenant_id': data.get('tenantId'),
-                'created_at': data.get('createdAt'),
-                'metadata': data.get('meta', {}),
-                'firestore_path': doc.reference.path
-            })
-        
-        return results
-        
-    except Exception as e:
-        print(f"Error in search_by_identity: {str(e)}")
-        return []
+    q = db.collection("embeddings").where("personId", "==", person_id)
+    if uid:
+        q = q.where("uid", "==", uid)
+    q = q.limit(int(num_neighbors))
+
+    person = {}
+    p_doc = db.document(f"people/{person_id}").get()
+    if p_doc.exists:
+        person = {"id": person_id, **p_doc.to_dict()}
+
+    results: List[Dict] = []
+    for emb_doc in q.stream():
+        emb = emb_doc.to_dict()
+        vector_id = emb.get("vectorId") or emb_doc.id
+
+        enc_ref = db.document(f"encounters/{vector_id}")
+        enc_doc = enc_ref.get()
+        enc = enc_doc.to_dict() if enc_doc.exists else {}
+
+        results.append({
+            "vectorId": vector_id,
+            "uid": emb.get("uid"),
+            "person": person or None,
+            "encounter": {
+                "id": vector_id,
+                "sessionId": enc.get("sessionId"),
+                "summary": enc.get("summary"),
+                "timestamp": enc.get("timestamp"),
+                "location": enc.get("location"),
+            } if enc else None,
+            "paths": {
+                "embedding": emb_doc.reference.path,
+                "encounter": enc_ref.path if enc else None,
+            },
+            # distance is not applicable here; this is a direct identity lookup
+            "distance": 0.0,
+            "similarity": 1.0,
+        })
+
+    return results

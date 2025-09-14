@@ -1,54 +1,45 @@
-# app.py
-import os, time
+import os, time, datetime
 from flask import Flask, request, jsonify
 import firebase_admin
 from firebase_admin import firestore, storage as fa_storage
 from google.cloud import storage as gcs
-from services.vector_store import ingest_embedding, init_vertex
-from services.nearest_neighbor import find_nearest_neighbors, find_similar_faces
+from google.cloud.firestore_v1 import GeoPoint
 
+from services.vector_store import init_vertex, upsert_to_vertex
+from services.nearest_neighbor import find_nearest_neighbors
 
-
-# ---- Init Flask first ----
 app = Flask(__name__)
-
-# Global variables for lazy initialization
-_db = None
-_bucket = None
-_gcs_client = None
+_db = _bucket = _gcs_client = None
 
 def get_firebase_clients():
-    """Initialize Firebase clients lazily"""
     global _db, _bucket, _gcs_client
-    
     if _db is None:
-        try:
-            # Check for BUCKET env var only when needed
-            bucket_name = os.environ.get("BUCKET")
-            if not bucket_name:
-                raise RuntimeError("Missing BUCKET env var (e.g., mementoai-ed5d8.firebasestorage.app)")
-            
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app(options={"storageBucket": bucket_name})
-            _db = firestore.client()
-            _bucket = fa_storage.bucket()
-            _gcs_client = gcs.Client()
-        except Exception as e:
-            print(f"Firebase initialization error: {e}")
-            # Return None clients to prevent crashes
-            return None, None, None
-    
+        bucket_name = os.environ.get("BUCKET")
+        if not bucket_name:
+            raise RuntimeError("Missing BUCKET env var (e.g., mementoai.appspot.com)")
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(options={"storageBucket": bucket_name})
+        _db = firestore.client()
+        _bucket = fa_storage.bucket()
+        _gcs_client = gcs.Client()
     return _db, _bucket, _gcs_client
+
+def _parse_timestamp(ts):
+    # Accept epoch ms or seconds; otherwise leave None
+    try:
+        ts = float(ts)
+        if ts > 10_000_000_000: ts /= 1000.0  # ms → s
+        return datetime.datetime.utcfromtimestamp(ts).replace(tzinfo=datetime.timezone.utc)
+    except Exception:
+        return None
 
 # ---------- Health ----------
 @app.route("/", methods=["GET"])
 def root():
     return "MementoAI Backend is running", 200
 
-@app.route("/healthz", methods=["GET", "HEAD"])
 @app.route("/health", methods=["GET", "HEAD"])
-@app.route("/_ah/health", methods=["GET", "HEAD"])  # GCP convention
-def healthz():
+def health():
     return ("ok", 200, {"Content-Type": "text/plain"})
 
 
@@ -172,50 +163,210 @@ def ingest_audio():
 # ---------- Vector Embedding Ingestion ----------
 # Request JSON: { uid, sessionId, vector: [floats], meta?: {...} }
 # Response JSON: { ok, vectorId, userPath }
-@app.route("/ingestEmbedding", methods=["POST"])
-def ingest_embedding_endpoint():
+# @app.route("/ingestEmbedding", methods=["POST"])
+# def ingest_embedding_endpoint():
+#     data = request.get_json(force=True, silent=True) or {}
+#     uid = data.get("uid")
+#     session_id = data.get("sessionId")
+#     vector = data.get("vector")
+#     meta = data.get("meta", {})
+#     item_type = data.get("itemType", "embedding")
+
+#     if not uid or not session_id or vector is None:
+#         return jsonify({"error": "uid, sessionId, and vector are required"}), 400
+#     if not isinstance(vector, list):
+#         return jsonify({"error": "vector must be a list (e.g., 512 floats)"}), 400
+
+#     # Optional: dimension validation
+#     dim = meta.get("dim")
+#     if dim is not None and isinstance(dim, int) and dim != len(vector):
+#         return jsonify({"error": f"vector dimension mismatch: got {len(vector)}, expected {dim}"}), 400
+
+#     # Get Firebase clients lazily
+#     db, _, _ = get_firebase_clients()
+#     if db is None:
+#         return jsonify({"error": "Firebase initialization failed"}), 500
+
+#     # Ensure Vertex client is initialized
+#     try:
+#         init_vertex()
+#     except Exception as e:
+#         return jsonify({"error": f"Vertex init failed: {e}"}), 500
+
+#     # Upsert to Vertex + write pointer docs
+#     try:
+#         vector_id, user_path = ingest_embedding(
+#             db=db,
+#             uid=uid,
+#             session_id=session_id,
+#             vector=vector,
+#             meta=meta,
+#             item_type=item_type
+#         )
+#     except Exception as e:
+#         return jsonify({"error": f"ingest failed: {e}"}), 500
+
+#     return jsonify({"vectorId": vector_id, "userPath": user_path}), 200
+    
+# ---------- NEW: Ingest a full encounter from glasses ----------
+# JSON:
+# {
+#   uid, sessionId, timestamp, location, summary, transcript, rawTranscript,
+#   confidence (int), gps: {lat,lng} (or lat,lng top-level),
+#   nextSteps?, skills?, name?, vector? (list of 128 ints)
+# }
+@app.route("/ingestEncounter", methods=["POST"])
+def ingest_encounter():
+    data = request.get_json(force=True, silent=True) or {}
+
+    # Required fields
+    uid        = data.get("uid")
+    session_id = data.get("sessionId")
+    timestamp  = data.get("timestamp")
+    location   = data.get("location")
+    summary    = data.get("summary")
+    transcript = data.get("transcript")
+    raw_trans  = data.get("rawTranscript")
+    confidence = data.get("confidence")
+
+    if not uid or not session_id:
+        return jsonify({"error": "uid and sessionId are required"}), 400
+    if timestamp is None or location is None or summary is None or transcript is None or raw_trans is None:
+        return jsonify({"error": "timestamp, location, summary, transcript, rawTranscript are required"}), 400
+    if not isinstance(confidence, int):
+        return jsonify({"error": "confidence must be an integer"}), 400
+
+    # GPS (accept gps.lat/lng OR top-level lat/lng; cast to float)
+    gps = data.get("gps") or {}
+    lat = gps.get("lat", data.get("lat"))
+    lng = gps.get("lng", data.get("lng"))
+    if lat is None or lng is None:
+        return jsonify({"error": "gps.lat and gps.lng (or top-level lat/lng) are required"}), 400
+    try:
+        geopoint = GeoPoint(float(lat), float(lng))
+    except Exception:
+        return jsonify({"error": "lat/lng must be numbers"}), 400
+
+    # Optional
+    next_steps = data.get("nextSteps")
+    skills     = data.get("skills")
+    name       = data.get("name")
+
+    # Optional embedding (128 ints)
+    vector = data.get("vector")
+    if vector is not None and (not isinstance(vector, list) or len(vector) != 128):
+        return jsonify({"error": "vector must be a list of 128 numbers"}), 400
+
+    db, _, _ = get_firebase_clients()
+
+    # Ensure Vertex is ready if we have a vector
+    vector_id = None
+    try:
+        if vector is not None:
+            init_vertex()
+            # cast to float for Vertex; include restricts metadata
+            meta = {"uid": uid, "modality": "face", "model": "face-128@v1"}
+            vector_id = upsert_to_vertex(uid, session_id, vector, meta)
+    except Exception as e:
+        return jsonify({"error": f"Vertex upsert failed: {e}"}), 500
+
+    # Choose encounterId: prefer vectorId (so 1:1 link), else timestamp-based
+    enc_id = vector_id or f"enc_{int(time.time()*1000)}"
+
+    # Build encounter doc
+    device_dt = _parse_timestamp(timestamp)
+    encounter_doc = {
+        "uid": uid,
+        "sessionId": session_id,
+        "timestamp": device_dt or timestamp,   # store datetime if parsed, else raw
+        "location": location,
+        "geo": geopoint,
+        "summary": summary,
+        "transcript": transcript,
+        "rawTranscript": raw_trans,
+        "nextSteps": next_steps,
+        "skills": skills,
+        "confidence": confidence,
+        "name": name,
+        "vectorId": vector_id,
+        "match": {"status": "unknown"},
+        "createdAt": firestore.SERVER_TIMESTAMP
+    }
+
+    enc_path = f"encounters/{enc_id}"
+    db.document(enc_path).set({k:v for k,v in encounter_doc.items() if v is not None}, merge=True)
+
+    # Write embedding pointer if we upserted to Vertex
+    if vector_id:
+        try:
+            write_embedding_doc(
+                db,
+                vector_id=vector_id,
+                uid=uid,
+                tenant_id=None,
+                encounter_path=enc_path,
+                model="face-128@v1",
+                modality="face",
+                dim=128,
+                precision="int"
+            )
+        except Exception as e:
+            return jsonify({"error": f"Failed to write embedding pointer: {e}"}), 500
+
+    return jsonify({"ok": True, "encounterId": enc_id, "vectorId": vector_id}), 200
+
+# ---------- NEW: Match ----------
+# JSON: { uid, queryVector:[128 floats/ints], k?:5, threshold?:0.55 }
+@app.route("/match", methods=["POST"])
+def match():
     data = request.get_json(force=True, silent=True) or {}
     uid = data.get("uid")
-    session_id = data.get("sessionId")
-    vector = data.get("vector")
-    meta = data.get("meta", {})
-    item_type = data.get("itemType", "embedding")
+    qv  = data.get("queryVector")
+    k   = int(data.get("k", 5))
+    thr = float(data.get("threshold", 0.55))
 
-    if not uid or not session_id or vector is None:
-        return jsonify({"error": "uid, sessionId, and vector are required"}), 400
-    if not isinstance(vector, list):
-        return jsonify({"error": "vector must be a list (e.g., 512 floats)"}), 400
+    if not uid or not isinstance(qv, list) or len(qv) != 128:
+        return jsonify({"error": "uid and queryVector(128) are required"}), 400
 
-    # Optional: dimension validation
-    dim = meta.get("dim")
-    if dim is not None and isinstance(dim, int) and dim != len(vector):
-        return jsonify({"error": f"vector dimension mismatch: got {len(vector)}, expected {dim}"}), 400
-
-    # Get Firebase clients lazily
     db, _, _ = get_firebase_clients()
-    if db is None:
-        return jsonify({"error": "Firebase initialization failed"}), 500
-
-    # Ensure Vertex client is initialized
     try:
         init_vertex()
+        # neighbors: [{vectorId, distance}] (if using cosine distance, you may convert to similarity = 1 - distance)
+        neighbors = find_neighbors(qv, num_neighbors=k, filters={"modality":"face","model":"face-128@v1"}, uid=uid)
     except Exception as e:
-        return jsonify({"error": f"Vertex init failed: {e}"}), 500
+        return jsonify({"error": f"Vertex search failed: {e}"}), 500
 
-    # Upsert to Vertex + write pointer docs
-    try:
-        vector_id, user_path = ingest_embedding(
-            db=db,
-            uid=uid,
-            session_id=session_id,
-            vector=vector,
-            meta=meta,
-            item_type=item_type
-        )
-    except Exception as e:
-        return jsonify({"error": f"ingest failed: {e}"}), 500
+    if not neighbors:
+        return jsonify({"status":"unknown", "candidates":[]}), 200
 
-    return jsonify({"vectorId": vector_id, "userPath": user_path}), 200
+    # Convert distance to similarity if you use COSINE_DISTANCE (sim ~ 1 - dist)
+    best = min(neighbors, key=lambda n: n["distance"])
+    similarity = 1.0 - float(best["distance"])
+    vector_id = best["vectorId"]
+
+    # Load encounter in 1 read (encounterId == vectorId if created via /ingestEncounter)
+    enc_ref = db.document(f"encounters/{vector_id}")
+    enc = enc_ref.get()
+    payload = {
+        "status": "unknown",
+        "best": {"vectorId": vector_id, "distance": best["distance"], "similarity": similarity}
+    }
+
+    if similarity >= thr and enc.exists:
+        doc = enc.to_dict()
+        person_id = (doc.get("match") or {}).get("personId")
+        if person_id:
+            person = db.document(f"people/{person_id}").get()
+            payload["status"] = "recognized"
+            payload["person"] = {"id": person_id, **(person.to_dict() if person.exists else {})}
+            payload["encounter"] = {"id": vector_id, "summary": doc.get("summary"), "timestamp": doc.get("timestamp")}
+        else:
+            payload["status"] = "candidate"
+            payload["encounter"] = {"id": vector_id, "summary": doc.get("summary"), "timestamp": doc.get("timestamp")}
+    else:
+        payload["status"] = "unknown"
+
+    return jsonify(payload), 200
 
 # ---------- Vector Search Endpoints ----------
 # Request JSON: { queryVector: [floats], numNeighbors?: int, filters?: {...}, uid?: "..." }
@@ -224,196 +375,96 @@ def ingest_embedding_endpoint():
 def search_vectors():
     data = request.get_json(force=True, silent=True) or {}
     query_vector = data.get("queryVector")
-    num_neighbors = data.get("numNeighbors", 10)
-    filters = data.get("filters", {})
+    num_neighbors = int(data.get("numNeighbors", 10))
+    filters = data.get("filters", {}) or {}
     uid = data.get("uid")
 
-    if not query_vector or not isinstance(query_vector, list):
-        return jsonify({"error": "queryVector is required and must be a list of floats"}), 400
+    if not isinstance(query_vector, list) or len(query_vector) != 128:
+        return jsonify({"error": "queryVector must be a list of 128 numbers"}), 400
 
     try:
-        # Initialize Vertex AI
         init_vertex()
-        
-        # Perform the search
-        results = find_nearest_neighbors(
-            query_vector=query_vector,
-            num_neighbors=num_neighbors,
-            filters=filters,
-            uid=uid
-        )
-        
+        results = find_neighbors(
+            query_vector, num_neighbors=num_neighbors,
+            filters=filters, uid=uid
+        )  # returns [{ "vectorId", "distance" }]
+        # You can add similarity here if you like:
+        for r in results:
+            r["similarity"] = 1.0 - float(r["distance"])
         return jsonify({"results": results}), 200
-        
     except Exception as e:
-        return jsonify({"error": f"Search failed: {str(e)}"}), 500
-
-# Request JSON: { queryVector: [floats], numNeighbors?: int, uid?: "...", sessionId?: "..." }
-# Response JSON: { results: [{ vectorId, distance, uid, sessionId, metadata, ... }] }
-@app.route("/searchFaces", methods=["POST"])
-def search_faces():
-    data = request.get_json(force=True, silent=True) or {}
-    query_vector = data.get("queryVector")
-    num_neighbors = data.get("numNeighbors", 10)
-    uid = data.get("uid")
-    session_id = data.get("sessionId")
-
-    if not query_vector or not isinstance(query_vector, list):
-        return jsonify({"error": "queryVector is required and must be a list of floats"}), 400
-
-    try:
-        # Get Firebase clients
-        db, _, _ = get_firebase_clients()
-        if db is None:
-            return jsonify({"error": "Firebase initialization failed"}), 500
-
-        # Initialize Vertex AI
-        init_vertex()
-        
-        # Perform the face search with Firestore enrichment
-        results = find_similar_faces(
-            db=db,
-            query_vector=query_vector,
-            num_neighbors=num_neighbors,
-            uid=uid,
-            session_id=session_id
-        )
-        
-        return jsonify({"results": results}), 200
-        
-    except Exception as e:
-        return jsonify({"error": f"Face search failed: {str(e)}"}), 500
-
-# Request JSON: { identityId: "...", numResults?: int, uid?: "..." }
-# Response JSON: { results: [{ vectorId, uid, sessionId, metadata, ... }] }
-@app.route("/searchByIdentity", methods=["POST"])
-def search_by_identity():
-    data = request.get_json(force=True, silent=True) or {}
-    identity_id = data.get("identityId")
-    num_results = data.get("numResults", 10)
-    uid = data.get("uid")
-
-    if not identity_id:
-        return jsonify({"error": "identityId is required"}), 400
-
-    try:
-        # Get Firebase clients
-        db, _, _ = get_firebase_clients()
-        if db is None:
-            return jsonify({"error": "Firebase initialization failed"}), 500
-
-        # Import the function here to avoid circular imports
-        from services.nearest_neighbor import search_by_identity
-        
-        # Search for faces by identity
-        results = search_by_identity(
-            db=db,
-            identity_id=identity_id,
-            num_neighbors=num_results,
-            uid=uid
-        )
-        
-        return jsonify({"results": results}), 200
-        
-    except Exception as e:
-        return jsonify({"error": f"Identity search failed: {str(e)}"}), 500
+        return jsonify({"error": f"Search failed: {e}"}), 500
 
 
-# def ingest_audio():
+# # Request JSON: { queryVector: [floats], numNeighbors?: int, uid?: "...", sessionId?: "..." }
+# # Response JSON: { results: [{ vectorId, distance, uid, sessionId, metadata, ... }] }
+# @app.route("/searchFaces", methods=["POST"])
+# def search_faces():
 #     data = request.get_json(force=True, silent=True) or {}
+#     query_vector = data.get("queryVector")
+#     num_neighbors = data.get("numNeighbors", 10)
 #     uid = data.get("uid")
 #     session_id = data.get("sessionId")
-#     timestamp = data.get("timestamp")  # Required
-#     location = data.get("location")    # Required
-#     summary = data.get("summary")      # Required
-    
-#     # Optional fields
-#     transcript = data.get("transcript")
-#     skills = data.get("skills")
-#     next_steps = data.get("nextSteps")
-#     confidence = data.get("confidence")
-#     contact_info = data.get("contactInfo")
 
-#     # Validate required fields
-#     if not uid or not session_id:
-#         return jsonify({"error": "uid and sessionId are required"}), 400
-#     if not timestamp:
-#         return jsonify({"error": "timestamp is required"}), 400
-#     if not location:
-#         return jsonify({"error": "location is required"}), 400
-#     if not summary:
-#         return jsonify({"error": "summary is required"}), 400
+#     if not query_vector or not isinstance(query_vector, list):
+#         return jsonify({"error": "queryVector is required and must be a list of floats"}), 400
 
-#     # Validate confidence is int if provided
-#     if confidence is not None and not isinstance(confidence, int):
-#         return jsonify({"error": "confidence must be an integer"}), 400
+#     try:
+#         # Get Firebase clients
+#         db, _, _ = get_firebase_clients()
+#         if db is None:
+#             return jsonify({"error": "Firebase initialization failed"}), 500
 
-#     # Get Firebase clients lazily
-#     db, bucket, gcs_client = get_firebase_clients()
-#     if db is None:
-#         return jsonify({"error": "Firebase initialization failed"}), 500
+#         # Initialize Vertex AI
+#         init_vertex()
+        
+#         # Perform the face search with Firestore enrichment
+#         results = find_similar_faces(
+#             db=db,
+#             query_vector=query_vector,
+#             num_neighbors=num_neighbors,
+#             uid=uid,
+#             session_id=session_id
+#         )
+        
+#         return jsonify({"results": results}), 200
+        
+#     except Exception as e:
+#         return jsonify({"error": f"Face search failed: {str(e)}"}), 500
 
-#     ts = int(time.time() * 1000)
-#     doc = {
-#         "uid": uid,
-#         "sessionId": session_id,
-#         "itemType": "audio_meta",
-#         "timestamp": timestamp,
-#         "location": location,
-#         "summary": summary,
-#         "createdAt": firestore.SERVER_TIMESTAMP
-#     }
-    
-#     # Add optional fields if provided
-#     if transcript:
-#         doc["transcript"] = transcript
-#     if skills:
-#         doc["skills"] = skills
-#     if next_steps:
-#         doc["nextSteps"] = next_steps
-#     if confidence is not None:
-#         doc["confidence"] = confidence
-#     if contact_info:
-#         doc["contactInfo"] = contact_info
-    
-#     db.document(f"sessions/{session_id}/items/{ts}").set(doc, merge=True)
+# # Request JSON: { identityId: "...", numResults?: int, uid?: "..." }
+# # Response JSON: { results: [{ vectorId, uid, sessionId, metadata, ... }] }
+# @app.route("/searchByIdentity", methods=["POST"])
+# def search_by_identity():
+#     data = request.get_json(force=True, silent=True) or {}
+#     identity_id = data.get("identityId")
+#     num_results = data.get("numResults", 10)
+#     uid = data.get("uid")
 
-#     return jsonify({"ok": True, "itemId": str(ts)}), 200
+#     if not identity_id:
+#         return jsonify({"error": "identityId is required"}), 400
 
-# ---------- (Optional) Direct multipart ingest (if you want to proxy file uploads) ----------
-# Glasses POST multipart: fields(uid, sessionId, itemType) + file=@/path/to/file
-# Response JSON: { ok, storagePath, itemId }
-@app.route("/ingest", methods=["POST"])
-def ingest_multipart():
-    uid = request.form.get("uid")
-    session_id = request.form.get("sessionId")
-    item_type = request.form.get("itemType", "unknown")
-    file = request.files.get("file")
+#     try:
+#         # Get Firebase clients
+#         db, _, _ = get_firebase_clients()
+#         if db is None:
+#             return jsonify({"error": "Firebase initialization failed"}), 500
 
-    if not uid or not session_id or not file:
-        return jsonify({"error": "uid, sessionId and file are required"}), 400
-
-    # Get Firebase clients lazily
-    db, bucket, gcs_client = get_firebase_clients()
-
-    ts = int(time.time() * 1000)
-    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "bin"
-    storage_path = f"inputs/{uid}/{session_id}/{ts}.{ext}"
-    content_type = file.mimetype or "application/octet-stream"
-
-    blob = bucket.blob(storage_path)
-    blob.upload_from_file(file.stream, content_type=content_type)
-
-    db.document(f"sessions/{session_id}/items/{ts}").set({
-        "uid": uid,
-        "storagePath": storage_path,
-        "status": "uploaded",
-        "itemType": item_type,
-        "contentType": content_type,
-        "createdAt": firestore.SERVER_TIMESTAMP
-    }, merge=True)
-
-    return jsonify({"ok": True, "storagePath": storage_path, "itemId": str(ts)}), 200
+#         # Import the function here to avoid circular imports
+#         from services.nearest_neighbor import search_by_identity
+        
+#         # Search for faces by identity
+#         results = search_by_identity(
+#             db=db,
+#             identity_id=identity_id,
+#             num_neighbors=num_results,
+#             uid=uid
+#         )
+        
+#         return jsonify({"results": results}), 200
+        
+#     except Exception as e:
+#         return jsonify({"error": f"Identity search failed: {str(e)}"}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))

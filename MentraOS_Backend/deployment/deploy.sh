@@ -24,8 +24,8 @@ gcloud run deploy $SERVICE_NAME \
   --set-env-vars GCP_PROJECT=$PROJECT_ID \
   --set-env-vars GCP_LOCATION=$REGION \
   --set-env-vars INDEX_ENDPOINT="projects/528890859039/locations/us-central1/indexEndpoints/4118983862904684544" \
-  --set-env-vars DEPLOYED_INDEX_ID="faces_prod" \
-  --set-env-vars INDEX_ID="9168398654489231360" \
+  --set-env-vars DEPLOYED_INDEX_ID="faces_prod_128" \
+  --set-env-vars INDEX_ID="6818082598955253760" \
   --allow-unauthenticated \
   --port 8080 \
   --memory 2Gi \
