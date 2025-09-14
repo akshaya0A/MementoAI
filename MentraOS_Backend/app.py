@@ -97,61 +97,96 @@ def mint_upload_url():
         "itemId": str(ts)
     }), 200
 
-# ---------- Ingest numeric arrays (e.g., 128-dim embeddings) ----------
-# Request JSON: { uid, sessionId, itemType: "embedding"|..., vector: [floats], meta?: {...} }
+# ---------- Ingest audio metadata from smart glasses ----------
+# Request JSON: { uid, sessionId, timestamp, location, summary, transcript, nextSteps?, skills?, confidence, gpsLocation, rawTranscript, name? }
 # Response JSON: { ok, itemId }
-@app.route("/ingestArray", methods=["POST"])
-def ingest_array():
+@app.route("/ingestAudio", methods=["POST"])
+def ingest_audio():
     data = request.get_json(force=True, silent=True) or {}
+    
+    # Required fields
     uid = data.get("uid")
     session_id = data.get("sessionId")
-    item_type = data.get("itemType", "embedding")
-    vector = data.get("vector")
-    meta = data.get("meta", {})
+    timestamp = data.get("timestamp")
+    location = data.get("location")
+    summary = data.get("summary")
+    transcript = data.get("transcript")
+    confidence = data.get("confidence")
+    gps_location = data.get("gpsLocation")
+    raw_transcript = data.get("rawTranscript")
+    
+    # Optional fields
+    next_steps = data.get("nextSteps")
+    skills = data.get("skills")
+    name = data.get("name")
 
-    if not uid or not session_id or vector is None:
-        return jsonify({"error": "uid, sessionId, and vector are required"}), 400
-    if not isinstance(vector, list):
-        return jsonify({"error": "vector must be a list (e.g., 128 floats)"}), 400
+    # Validate required fields
+    if not uid or not session_id or not timestamp or not location or not summary or not transcript:
+        return jsonify({"error": "uid, sessionId, timestamp, location, summary, and transcript are required"}), 400
+    
+    if confidence is None or not isinstance(confidence, (int, float)):
+        return jsonify({"error": "confidence is required and must be a number"}), 400
+    
+    if not gps_location or not isinstance(gps_location, list) or len(gps_location) != 2:
+        return jsonify({"error": "gpsLocation is required and must be an array of two numbers [lat, lng]"}), 400
+    
+    if not raw_transcript:
+        return jsonify({"error": "rawTranscript is required"}), 400
 
     # Get Firebase clients lazily
     db, bucket, gcs_client = get_firebase_clients()
+    if db is None:
+        return jsonify({"error": "Firebase initialization failed"}), 500
 
-    ts = int(time.time() * 1000)
+    # Create audio metadata document
+    ts = int(time.time() * 1000) if not isinstance(timestamp, (int, float)) else timestamp
     doc = {
         "uid": uid,
         "sessionId": session_id,
-        "itemType": item_type,
-        "vector": vector,
-        "meta": meta,
+        "itemType": "audio",
+        "timestamp": timestamp,
+        "location": location,
+        "summary": summary,
+        "transcript": transcript,
+        "confidence": confidence,
+        "gpsLocation": gps_location,
+        "rawTranscript": raw_transcript,
         "createdAt": firestore.SERVER_TIMESTAMP
     }
-    db.document(f"sessions/{session_id}/items/{ts}").set(doc, merge=True)
-
-    return jsonify({"ok": True, "itemId": str(ts)}), 200
-
-# ---------- Audio ingestion for Meta glasses ----------
-# Request JSON: { uid, sessionId, timestamp, transcript?, skills?, location, nextSteps?, confidence?, summary, contactInfo? }
-@app.route("/ingestAudio", methods=["POST"])
-def ingest_array():
-    data = request.get_json(force=True, silent=True) or {}
-    uid        = data.get("uid")
-    session_id = data.get("sessionId")
-    item_type  = data.get("itemType", "embedding")
-    vector     = data.get("vector")
-    meta       = data.get("meta", {})
-    name       = data.get("name")  # Optional name parameter
     
-    # Add name to meta if provided
+    # Add optional fields if provided
+    if next_steps:
+        doc["nextSteps"] = next_steps
+    if skills:
+        doc["skills"] = skills
     if name:
-        meta["name"] = name
+        doc["name"] = name
+
+    # Save to Firestore
+    try:
+        db.document(f"sessions/{session_id}/items/{ts}").set(doc, merge=True)
+        return jsonify({"ok": True, "itemId": str(ts)}), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to save audio data: {str(e)}"}), 500
+
+# ---------- Vector Embedding Ingestion ----------
+# Request JSON: { uid, sessionId, vector: [floats], meta?: {...} }
+# Response JSON: { ok, vectorId, userPath }
+@app.route("/ingestEmbedding", methods=["POST"])
+def ingest_embedding_endpoint():
+    data = request.get_json(force=True, silent=True) or {}
+    uid = data.get("uid")
+    session_id = data.get("sessionId")
+    vector = data.get("vector")
+    meta = data.get("meta", {})
+    item_type = data.get("itemType", "embedding")
 
     if not uid or not session_id or vector is None:
         return jsonify({"error": "uid, sessionId, and vector are required"}), 400
     if not isinstance(vector, list):
-        return jsonify({"error": "vector must be a list (e.g., 128/256/512 floats)"}), 400
+        return jsonify({"error": "vector must be a list (e.g., 512 floats)"}), 400
 
-    # Optional: dimension sanity
+    # Optional: dimension validation
     dim = meta.get("dim")
     if dim is not None and isinstance(dim, int) and dim != len(vector):
         return jsonify({"error": f"vector dimension mismatch: got {len(vector)}, expected {dim}"}), 400
@@ -161,7 +196,7 @@ def ingest_array():
     if db is None:
         return jsonify({"error": "Firebase initialization failed"}), 500
 
-    # Ensure Vertex client is initialized (safe to call multiple times)
+    # Ensure Vertex client is initialized
     try:
         init_vertex()
     except Exception as e:
@@ -180,7 +215,7 @@ def ingest_array():
     except Exception as e:
         return jsonify({"error": f"ingest failed: {e}"}), 500
 
-    return jsonify({"ok": True, "vectorId": vector_id, "path": user_path}), 200
+    return jsonify({"vectorId": vector_id, "userPath": user_path}), 200
 
 # ---------- Vector Search Endpoints ----------
 # Request JSON: { queryVector: [floats], numNeighbors?: int, filters?: {...}, uid?: "..." }
