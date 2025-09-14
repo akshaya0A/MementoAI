@@ -8,10 +8,14 @@
     "dev": "bun --watch src/index.ts"
   },
   "dependencies": {
-    "@mentra/sdk": "latest"
+    "@anthropic-ai/sdk": "^0.62.0",
+    "@mentra/sdk": "latest",
+    "ajv": "^8.17.1",
+    "dotenv": "^17.2.2",
+    "openai": "^5.20.2"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.19.14",
+    "typescript": "^5.0.0"
   }
 }

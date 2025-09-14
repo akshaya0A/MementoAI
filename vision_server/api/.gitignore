@@ -1,6 +1,7 @@
 .venv
 __pycache__
 *.jpg
+test3.py
 test2.py
 test.py
 *.key

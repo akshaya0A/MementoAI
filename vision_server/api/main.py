@@ -55,19 +55,37 @@ def before_request():
     #maybe cache face embeddings?
     global known_embeddings
     global known_uids
+    global recognized_faces
+    global old_recognized_faces
+    known_embeddings=[]
+    known_uids=[]
+    recognized_faces=[]
+    old_recognized_faces=[]
 
+    response = requests.get("https://mementoai-backend-528890859039.us-central1.run.app/embeddings?includeVector=true")
+    
+    
     # response = requests.get("https://mementoai-backend-528890859039.us-central1.run.app/xxx")
-    # print(response.json())
+    
+    #print(response.json())
+    items = (response.json()['items'])
+    for item in items:
+        print(item['uid'])
+        if item['vector'] is not None and item['uid'] is not None:
+            known_embeddings.append(item['vector'])
+            known_uids.append(item['uid'])
 
-    # faces = response.json()
-    # for face in faces:
-    #     known_embeddings.append(face['embedding'])
-    #     known_uids.append(face['uid'])
+    print('known embeddings:', known_embeddings)
+    print('known uids:', known_uids)
 
-    # known_embeddings = np.array(np.load("face_encoding.npy"))
+@app.route('/', methods=['GET'])
+def index():
+    return "Hello, World!"
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    global recognized_faces, known_embeddings, known_uids, sfr
+    
     print("File received!")
     print(f"Request files: {list(request.files.keys())}")
     print(f"Request form: {list(request.form.keys())}")
@@ -170,13 +188,18 @@ def upload_file():
             face_locations, face_encodings = sfr.detect_known_faces(img_np)
             if face_locations.size != 0: # if there is a face present!
 
-                # for face_encoding in face_encodings:
-                #     ind = sfr.compare_faces(face_encoding, known_embeddings)
-                #     if ind == -1:
-                #         print("NO Face recognized!")
-                #     else:
-                #         print("Face recognized!")
-                #         print(f"UID: {known_uids[ind]}")
+                if(len(known_embeddings)!=0):
+                    for face_encoding in face_encodings:
+                        face_distances = face_recognition.face_distance(known_embeddings, face_encoding)
+                        best_match_index = np.argmin(face_distances)
+                        if(face_distances[best_match_index] < 0.6): #thresholding faces
+                            ind = best_match_index
+                            print("Face recognized!")
+                            print(f"UID: {known_uids[ind]}")
+                            recognized_faces.append(known_uids[ind])
+                        else:
+                            print("NO Face recognized!")
+                            
                     
                     #endpoint for mentraOS!
                         
@@ -209,18 +232,16 @@ def upload_file():
                 body = {
                     "uid": "vision_server",
                     "sessionId": "session_1",
-                    "itemType": "embedding",
-                    "vector": face_encoding.tolist(),
-                    "meta": {
-                        "model": "face-recognition-128d",
-                        "source": "vision"
-                    }
+                    "vectors": [face_encoding.tolist()],
+                    "model": "face-recognition-128d",
+                    "modality": "face",
+                    "storeVector": True
                 }
 
                 print("Sending face embedding to API...")
                 
                 try:
-                    response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/ingestEmbedding", json=body)
+                    response = requests.post("https://mementoai-backend-528890859039.us-central1.run.app/bulkUpsertEmbeddings", json=body)
                     print(f"Response status code: {response.status_code}")
                     print(f"Response headers: {response.headers}")
                     print(f"Response text: {response.text}")
@@ -259,6 +280,20 @@ def upload_file():
     except Exception as e:
         print(f"Upload error: {e}")
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+
+@app.route('/recognized_faces', methods=['GET'])
+def get_recognized_faces():
+    global recognized_faces, old_recognized_faces
+    
+    if recognized_faces == old_recognized_faces:
+        return jsonify({
+            'message': 'No new faces recognized'
+        }), 205
+    else:
+        old_recognized_faces = recognized_faces.copy()  # Use copy() to avoid reference issues
+        return jsonify({
+            'message': 'New face recognized!'
+        }), 201
 
 if __name__ == '__main__':
     app.run(debug=True)

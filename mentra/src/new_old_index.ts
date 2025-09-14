@@ -1151,70 +1151,56 @@ async function onStart(session: AppSession) {
 }
 
 
+// // A function to simulate pinging a server, which returns a Promise.
+// async function pingServer(serverUrl: string): Promise<boolean> {
+//     try {
+//         const response = await fetch(serverUrl, { method: 'HEAD', cache: 'no-store' });
+//         // Using `response.ok` is a simple way to check if the request was successful (status in the 200-299 range).
+//         return response.ok;
+//     } catch (error) {
+//         console.error(`Ping failed for ${serverUrl}:`, error);
+//         return false;
+//     }
+// }
 
-// A function to simulate pinging a server, which returns a Promise.
-async function pingServer(serverUrl: string, session: AppSession): Promise<boolean> {
-    try {
-        const response = await fetch(serverUrl, { method: 'HEAD', cache: 'no-store' });
-        // Using `response.ok` is a simple way to check if the request was successful (status in the 200-299 range).
-        if (response.status == 201) {
-            //face recognized
-            console.log('face reocognised!')
-            return true;
-        } else if (response.status == 205) {
-            //no face recognized
-            console.log('no face reocognised!')
-            // Basic text-to-speech
-            return false;
-        }
-    } catch (error) {
-        console.error(`Ping failed for ${serverUrl}:`, error);
-        return false;
-    }
-    return false;
-}
+// // The recursive function that uses setTimeout to create the interval.
+// function startPinging(serverUrl: string, intervalMs: number) {
+//     let isRunning = true;
 
-// The recursive function that uses setTimeout to create the interval.
-function startPinging(serverUrl: string, intervalMs: number, session: AppSession) {
-    let isRunning = true;
+//     const ping = async () => {
+//         if (!isRunning) {
+//             return;
+//         }
 
-    const ping = async () => {
-        if (!isRunning) {
-            return;
-        }
+//         const isUp = await pingServer(serverUrl);
+//         const timestamp = new Date().toISOString();
+//         console.log(`${timestamp} - Server at ${serverUrl} is ${isUp ? 'online' : 'offline'}`);
 
-        const isUp = await pingServer(serverUrl, session);
-        if (isUp) {
-            // Basic text-to-speech
-            try {
-                const result = await session.audio.speak("Face Recognized!");
+//         // Schedule the next ping after the current one is complete.
+//         setTimeout(ping, intervalMs);
+//     };
 
-                if (result.success) {
-                    session.logger.info("Speech synthesis successful");
-                } else {
-                    session.logger.error(`❌ TTS failed: ${result.error}`);
-                }
-            } catch (error) {
-                session.logger.error(`Exception during TTS: ${error}`);
-            }
-            isRunning = false;
-        }
-        const timestamp = new Date().toISOString();
-        console.log(`${timestamp} - Server at ${serverUrl} is ${isUp ? 'online' : 'offline'}`);
+//     // Start the first ping.
+//     ping();
 
-        // Schedule the next ping after the current one is complete.
-        setTimeout(ping, intervalMs);
-    };
+//     // Return a function to stop the loop.
+//     return () => {
+//         console.log('Stopping server ping...');
+//         isRunning = false;
+//     };
+// }
 
-    // Start the first ping.
-    ping();
+// // --- Usage Example ---
+// const serverToPing = 'https://api.github.com/';
+// const pingInterval = 5000; // 5 seconds
 
-    // Return a function to stop the loop.
-    return () => {
-        console.log('Stopping server ping...');
-        isRunning = false;
-    };
-}
+// // Start the ping loop.
+// const stopPinging = startPinging(serverToPing, pingInterval);
+
+// // Stop the loop after 20 seconds.
+// setTimeout(() => {
+//     stopPinging();
+// }, 20000);
 
 
 
@@ -1231,6 +1217,13 @@ class Server extends AppServer {
             // console.log('Button pressed - capturing photo');
             await this.processPhoto(session);
         });
+
+        // const unsubDisconnected = session.events.onDisconnected(reason => {
+        //     console.log(`Disconnected from MentraOS Cloud. Reason: ${reason}`)
+        //     connected = false
+        // })
+
+
 
         // Add cleanup handler for photo events
         this.addCleanupHandler(unsubscribePhoto);
@@ -1269,19 +1262,6 @@ class Server extends AppServer {
 
             // Notify user
             await session.audio.speak("Photo captured and saved.");
-
-            // Ping server to check if face is recognized
-            const serverToPing = 'http://127.0.0.1:5000/recognized_faces';
-            const pingInterval = 5000; // 5 seconds
-
-            // Start the ping loop.
-            const stopPinging = startPinging(serverToPing, pingInterval, session);
-
-            // Stop the loop after 20 seconds.
-            setTimeout(() => {
-                stopPinging();
-                session.audio.speak("Nobody was recognized.")
-            }, 20000);
 
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);
